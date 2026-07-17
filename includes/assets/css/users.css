@@ -1,0 +1,101 @@
+.user-summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:20px;
+margin-bottom:30px;
+}
+
+.user-toolbar{
+display:flex;
+gap:15px;
+margin-bottom:25px;
+}
+
+.user-toolbar input,
+.user-toolbar select{
+padding:12px;
+border:1px solid #ddd;
+border-radius:8px;
+}
+
+.user-toolbar input{
+flex:1;
+}
+
+.user-table,
+.user-chart{
+background:#fff;
+padding:25px;
+border-radius:12px;
+box-shadow:0 3px 10px rgba(0,0,0,.08);
+margin-bottom:30px;
+}
+
+.user-table table{
+width:100%;
+border-collapse:collapse;
+}
+
+.user-table th,
+.user-table td{
+padding:15px;
+border-bottom:1px solid #eee;
+text-align:left;
+}
+
+.profile-photo{
+width:45px;
+height:45px;
+border-radius:50%;
+object-fit:cover;
+}
+
+.role{
+padding:6px 12px;
+border-radius:20px;
+color:#fff;
+font-size:13px;
+}
+
+.role.admin{
+background:#0B5ED7;
+}
+
+.role.manager{
+background:#6F42C1;
+}
+
+.status.active{
+background:#198754;
+padding:6px 12px;
+border-radius:20px;
+color:#fff;
+}
+
+.edit-btn,
+.reset-btn,
+.lock-btn,
+.delete-btn{
+border:none;
+background:none;
+cursor:pointer;
+font-size:16px;
+margin-right:8px;
+}
+
+.edit-btn{color:#198754;}
+.reset-btn{color:#0B5ED7;}
+.lock-btn{color:#F59E0B;}
+.delete-btn{color:#DC3545;}
+
+@media(max-width:768px){
+
+.user-toolbar{
+flex-direction:column;
+}
+
+.user-table{
+overflow-x:auto;
+}
+
+}

@@ -1,0 +1,179 @@
+.department-summary{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:20px;
+margin-bottom:30px;
+}
+
+.summary-card{
+display:flex;
+align-items:center;
+gap:20px;
+padding:25px;
+border-radius:12px;
+color:#fff;
+}
+
+.summary-card i{
+font-size:35px;
+}
+
+.blue{background:#0B5ED7;}
+.green{background:#198754;}
+.orange{background:#F59E0B;}
+.red{background:#DC3545;}
+
+.department-toolbar{
+display:flex;
+gap:15px;
+margin-bottom:25px;
+}
+
+.department-toolbar input,
+.department-toolbar select{
+padding:12px;
+border:1px solid #ddd;
+border-radius:8px;
+}
+
+.department-toolbar input{
+flex:1;
+}
+
+.department-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+gap:20px;
+margin-bottom:30px;
+}
+
+.department-card{
+background:#fff;
+padding:25px;
+border-radius:12px;
+box-shadow:0 3px 10px rgba(0,0,0,.08);
+transition:.3s;
+}
+
+.department-card:hover{
+transform:translateY(-5px);
+}
+
+.department-card .icon{
+font-size:42px;
+margin-bottom:20px;
+}
+
+.finance{color:#0B5ED7;}
+.hr{color:#198754;}
+.ict{color:#DC3545;}
+
+.status{
+padding:6px 14px;
+border-radius:20px;
+display:inline-block;
+margin-top:15px;
+color:#fff;
+font-size:13px;
+}
+
+.status.active{
+background:#198754;
+}
+
+.department-table,
+.department-chart{
+margin-top:30px;
+background:#fff;
+padding:25px;
+border-radius:12px;
+box-shadow:0 3px 10px rgba(0,0,0,.08);
+}
+
+.department-table table{
+width:100%;
+border-collapse:collapse;
+}
+
+.department-table th,
+.department-table td{
+padding:15px;
+border-bottom:1px solid #eee;
+text-align:left;
+}
+
+.edit-btn,
+.delete-btn{
+border:none;
+background:none;
+cursor:pointer;
+font-size:16px;
+margin-right:10px;
+}
+
+.edit-btn{
+color:#198754;
+}
+
+.delete-btn{
+color:#DC3545;
+}
+
+@media(max-width:768px){
+
+.department-toolbar{
+flex-direction:column;
+}
+
+.department-table{
+overflow-x:auto;
+}
+}
+.icon.finance{
+    color:#0d6efd;
+}
+
+.icon.hr{
+    color:#198754;
+}
+
+.icon.ict{
+    color:#dc3545;
+}
+
+.icon.supply{
+    color:#fd7e14;
+}
+
+.icon.quality{
+    color:#6f42c1;
+}
+
+.icon.sales{
+    color:#20c997;
+}
+
+.icon.production{
+    color:#795548;
+}
+
+.icon.marketing{
+    color:#d63384;
+}
+
+.icon.general{
+    color:#6c757d;
+}
+.department-card{
+    cursor:pointer;
+    transition:.3s;
+}
+
+
+.department-card:hover{
+
+transform:translateY(-5px);
+
+box-shadow:0 10px 25px rgba(0,0,0,.15);
+
+}
