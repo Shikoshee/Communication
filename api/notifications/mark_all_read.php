@@ -9,33 +9,21 @@ header("Content-Type: application/json");
 
 $user = Auth::getCurrentUser();
 
-$id = (int)($_POST["id"] ?? 0);
 
-updateData(
-
+$result = updateData(
     "notifications",
-
     [
-
-        "is_read"=>1,
-
-        "read_at"=>date("Y-m-d H:i:s")
-
+        "is_read" => 1,
+        "read_at" => date("Y-m-d H:i:s")
     ],
-
-    "id=? AND user_id=?",
-
     [
-
-        $id,
-        $user["id"]
-
+        "user_id" => $user['id']
     ]
-
 );
+
 
 echo json_encode([
 
-    "success"=>true
+    "success"=>$result['success']
 
 ]);

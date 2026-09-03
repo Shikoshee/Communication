@@ -25,8 +25,13 @@ if(!$id){
 }
 
 
-$result = deleteData(
+
+$result = updateData(
     "notifications",
+    [
+        "is_read" => 1,
+        "read_at" => date("Y-m-d H:i:s")
+    ],
     [
         "id" => $id,
         "user_id" => $user['id']
@@ -34,19 +39,9 @@ $result = deleteData(
 );
 
 
-if ($result['success']) {
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Notification deleted successfully."
-    ]);
+echo json_encode([
 
-} else {
+    "success"=>$result['success']
 
-    echo json_encode([
-        "success" => false,
-        "message" => $result['error']
-    ]);
-
-}
-;
+]);

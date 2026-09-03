@@ -1,101 +1,78 @@
 <?php
 
-require_once __DIR__ . '/../../Includes/auth.php';
-require_once __DIR__ . '/../../Includes/notifications.php';
+require_once "../../includes/config.php";
+require_once "../../includes/auth.php";
+require_once "../../includes/time.php";
 
-header('Content-Type: application/json');
+Auth::protect();
+
+header("Content-Type: application/json");
 
 $user = Auth::getCurrentUser();
 
-if (!$user || empty($user['id'])) {
-
-    echo json_encode([
-        'success' => false,
-        'count' => 0,
-        'notifications' => []
-    ]);
-
-    exit;
-}
-
-$userId = (int)$user['id'];
-
-
-/*
-|--------------------------------------------------------------------------
-| Get unread notification count
-|--------------------------------------------------------------------------
-*/
-
-$countRow = fetchRow(
-    "SELECT COUNT(*) AS total
-     FROM notifications
-     WHERE user_id=?
-     AND is_read=0",
-    [$userId]
-);
-
-$unreadCount = (int)($countRow['total'] ?? 0);
-
-
-/*
-|--------------------------------------------------------------------------
-| Get notifications
-|--------------------------------------------------------------------------
-*/
-
 $notifications = fetchAll(
-    "SELECT
-        id,
-        title,
-        message,
-        type,
-        is_read,
-        related_conversation_id,
-        created_at
-     FROM notifications
-     WHERE user_id=?
-     ORDER BY created_at DESC
-     LIMIT 20",
-    [$userId]
+
+"
+SELECT
+
+id,
+title,
+message,
+type,
+related_document_id,
+is_read,
+created_at
+
+FROM notifications
+
+WHERE user_id=?
+
+ORDER BY created_at DESC
+
+LIMIT 10
+
+",
+
+[
+    $user['id']
+]
+
 );
 
+foreach($notifications as &$notification){
 
-/*
-|--------------------------------------------------------------------------
-| Format notification time
-|--------------------------------------------------------------------------
-*/
-
-foreach ($notifications as &$notification) {
-
-    $notification['is_read'] = (int)$notification['is_read'];
-
-    $notification['time'] = !empty($notification['created_at'])
-        ? date('M j, Y g:i A', strtotime($notification['created_at']))
-        : '';
+    $notification["time"] = timeAgo($notification["created_at"]);
 
 }
 
 unset($notification);
 
+$unread = fetchRow(
 
-/*
-|--------------------------------------------------------------------------
-| Response
-|--------------------------------------------------------------------------
-*/
+"
+SELECT
+
+COUNT(*) AS total
+
+FROM notifications
+
+WHERE user_id=?
+AND is_read=0
+
+",
+
+[
+    $user['id']
+]
+
+);
 
 echo json_encode([
-    'success' => true,
 
-    // IMPORTANT:
-    // This is the unread count, NOT total notifications.
-    'count' => $unreadCount,
+    "success" => true,
 
-    'unread_count' => $unreadCount,
+    "count" => (int)$unread["total"],
 
-    'notifications' => $notifications
+    "notifications" => $notifications
+
 ]);
-
-exit;
