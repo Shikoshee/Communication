@@ -9,15 +9,43 @@ header("Content-Type: application/json");
 
 $user = Auth::getCurrentUser();
 
-$id = (int)($_POST['id'] ?? 0);
 
-$name = trim($_POST['name'] ?? '');
+/*
+ * ==========================================================
+ * INPUT
+ * ==========================================================
+ */
 
-$description = trim($_POST['description'] ?? '');
+$id = (int)(
+    $_POST['id'] ?? 0
+);
 
-$status = strtolower(trim($_POST['status'] ?? 'active'));
+$name = trim(
+    $_POST['name'] ?? ''
+);
 
-if ($id <= 0 || $name == '') {
+$description = trim(
+    $_POST['description'] ?? ''
+);
+
+$headId = (int)(
+    $_POST['head_id'] ?? 0
+);
+
+$status = strtolower(
+    trim(
+        $_POST['status'] ?? 'active'
+    )
+);
+
+
+/*
+ * ==========================================================
+ * VALIDATION
+ * ==========================================================
+ */
+
+if ($id <= 0 || $name === '') {
 
     echo json_encode([
         "success" => false,
@@ -25,25 +53,166 @@ if ($id <= 0 || $name == '') {
     ]);
 
     exit;
+
 }
 
-$exists = fetchRow(
 
-    "SELECT id FROM departments WHERE name=? AND id<>?",
+/*
+ * ==========================================================
+ * CHECK DEPARTMENT
+ * ==========================================================
+ */
 
-    [$name,$id]
+$department = fetchRow(
+
+    "SELECT id
+     FROM departments
+     WHERE id=?
+     LIMIT 1",
+
+    [
+        $id
+    ]
 
 );
 
-if($exists){
+if (!$department) {
 
     echo json_encode([
-        "success"=>false,
-        "message"=>"Department name already exists."
+        "success" => false,
+        "message" => "Department not found."
     ]);
 
     exit;
+
 }
+
+
+/*
+ * ==========================================================
+ * CHECK DUPLICATE NAME
+ * ==========================================================
+ */
+
+$exists = fetchRow(
+
+    "SELECT id
+     FROM departments
+     WHERE name=?
+     AND id<>?
+     LIMIT 1",
+
+    [
+        $name,
+        $id
+    ]
+
+);
+
+if ($exists) {
+
+    echo json_encode([
+        "success" => false,
+        "message" => "Department name already exists."
+    ]);
+
+    exit;
+
+}
+
+
+/*
+ * ==========================================================
+ * VALIDATE DEPARTMENT HEAD
+ * ==========================================================
+ */
+
+if ($headId > 0) {
+
+    $head = fetchRow(
+
+        "SELECT
+            id,
+            role,
+            status
+
+         FROM users
+
+         WHERE id=?
+
+         LIMIT 1",
+
+        [
+            $headId
+        ]
+
+    );
+
+
+    if (!$head) {
+
+        echo json_encode([
+            "success" => false,
+            "message" => "Selected department head was not found."
+        ]);
+
+        exit;
+
+    }
+
+
+    $headRole = strtolower(
+        trim(
+            (string)($head['role'] ?? '')
+        )
+    );
+
+
+    if (
+        !in_array(
+            $headRole,
+            [
+                'manager',
+                'admin',
+                'administrator'
+            ],
+            true
+        )
+    ) {
+
+        echo json_encode([
+            "success" => false,
+            "message" => "Only managers or administrators can be department heads."
+        ]);
+
+        exit;
+
+    }
+
+
+    if (
+        strtolower(
+            (string)($head['status'] ?? '')
+        ) !== 'active'
+    ) {
+
+        echo json_encode([
+            "success" => false,
+            "message" => "The selected department head is not active."
+        ]);
+
+        exit;
+
+    }
+
+}
+
+
+/*
+ * ==========================================================
+ * UPDATE
+ * ==========================================================
+ */
 
 $result = updateData(
 
@@ -51,48 +220,84 @@ $result = updateData(
 
     [
 
-        "name"=>$name,
+        "name" =>
+            $name,
 
-        "description"=>$description,
+        "description" =>
+            $description,
 
-        "status"=>$status
+        "head_id" =>
+            $headId > 0
+                ? $headId
+                : null,
+
+        "status" =>
+            $status
 
     ],
 
     [
 
-        "id"=>$id
+        "id" =>
+            $id
 
     ]
 
 );
 
-if(!$result['success']){
+
+if (!$result['success']) {
 
     echo json_encode([
-        "success"=>false,
-        "message"=>$result['error']
+        "success" => false,
+        "message" => $result['error']
     ]);
 
     exit;
+
 }
 
-insertData("activity_logs",[
 
-    "user_id"=>$user['id'],
+/*
+ * ==========================================================
+ * ACTIVITY LOG
+ * ==========================================================
+ */
 
-    "department_id"=>$id,
+insertData(
 
-    "activity"=>"Updated department ".$name,
+    "activity_logs",
 
-    "activity_type"=>"edit"
+    [
 
-]);
+        "user_id" =>
+            $user['id'],
+
+        "department_id" =>
+            $id,
+
+        "activity" =>
+            "Updated department " . $name,
+
+        "activity_type" =>
+            "edit"
+
+    ]
+
+);
+
+
+/*
+ * ==========================================================
+ * RESPONSE
+ * ==========================================================
+ */
 
 echo json_encode([
 
-    "success"=>true,
+    "success" => true,
 
-    "message"=>"Department updated successfully."
+    "message" =>
+        "Department updated successfully."
 
 ]);
