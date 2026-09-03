@@ -2,45 +2,39 @@
 
 require_once "../../includes/config.php";
 require_once "../../includes/auth.php";
-
+require_once "../../includes/notifications.php";
 
 Auth::protect();
 
-
-$user=Auth::getCurrentUser();
-
+$user = Auth::getCurrentUser();
 
 header("Content-Type: application/json");
 
 
-
 if(
-$user['role']!="admin"
-&&
-$user['role']!="manager"
+    $user['role']!="admin"
+    &&
+    $user['role']!="manager"
 ){
 
-echo json_encode([
+    echo json_encode([
+        "success"=>false,
+        "message"=>"Permission denied"
+    ]);
 
-"success"=>false,
-
-"message"=>"Permission denied"
-
-]);
-
-exit;
+    exit;
 
 }
 
 
 
+$id = (int)($_POST['id'] ?? 0);
+
+$reason = $_POST['reason'] ?? '';
 
 
-$id=(int)$_POST['id'];
 
-
-
-$document=fetchRow("
+$document = fetchRow("
 
 SELECT *
 
@@ -49,34 +43,30 @@ FROM documents
 WHERE id=?
 
 ",
-[$id]
-
-);
-
+[
+$id
+]);
 
 
 
 if(!$document){
 
+    echo json_encode([
 
-echo json_encode([
+        "success"=>false,
 
-"success"=>false,
+        "message"=>"Document not found"
 
-"message"=>"Document not found"
+    ]);
 
-]);
-
-
-exit;
+    exit;
 
 }
 
 
 
 
-
-updateData(
+$result = updateData(
 
 "documents",
 
@@ -86,15 +76,39 @@ updateData(
 
 "reviewed_by"=>$user['id'],
 
-"reviewed_at"=>date("Y-m-d H:i:s")
+"reviewed_at"=>date("Y-m-d H:i:s"),
+
+"reviewer_comment"=>$reason
 
 ],
 
-"id=?",
+[
 
-[$id]
+"id"=>$id
+
+]
 
 );
+
+
+
+if(!$result['success']){
+
+
+echo json_encode([
+
+"success"=>false,
+
+"message"=>$result['error']
+
+]);
+
+
+exit;
+
+
+}
+
 
 
 
@@ -123,29 +137,19 @@ insertData(
 
 
 
+createNotification(
 
-insertData(
+    $document['uploaded_by'],
 
-"notifications",
+    "Document Rejected",
 
-[
+    "Your document '".$document['title']."' has been rejected. Reason: ".$reason,
 
-"user_id"=>$document['uploaded_by'],
+    "approval",
 
-"title"=>"Document Rejected",
-
-"message"=>"Your document ".$document['title']." has been rejected.",
-
-"type"=>"approval",
-
-"related_document_id"=>$id
-
-]
+    $id
 
 );
-
-
-
 
 
 
@@ -153,6 +157,6 @@ echo json_encode([
 
 "success"=>true,
 
-"message"=>"Document rejected"
+"message"=>"Document rejected successfully"
 
 ]);
