@@ -2,23 +2,10 @@
 
 require_once '../../includes/config.php';
 require_once '../../includes/auth.php';
-require_once '../../includes/Permission.php';
 
 Auth::protect();
 
 header('Content-Type: application/json');
-
-if (!Permission::canShare()) {
-
-    echo json_encode([
-        'success' => false,
-        'message' => 'You do not have permission to share documents.'
-    ]);
-
-    exit;
-} 
-
-
 
 
 // ==========================================================

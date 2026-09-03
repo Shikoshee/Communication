@@ -5,6 +5,8 @@ require_once "../../includes/auth.php";
 
 Auth::protect();
 
+header("Content-Type: application/json");
+
 $users = fetchAll("
 
 SELECT
@@ -15,13 +17,11 @@ SELECT
 
 FROM users
 
-WHERE status='active'
+WHERE status = 'active'
 
-ORDER BY first_name
+ORDER BY first_name, last_name
 
 ");
-
-header("Content-Type: application/json");
 
 echo json_encode([
     "success" => true,
