@@ -5,609 +5,1055 @@ require_once 'includes/auth.php';
 require_once 'includes/Permission.php';
 
 Auth::protect();
-if (!Permission::canView()) {
-    die("Access Denied");
-}
 
 $user = Auth::getCurrentUser();
 
+/*
+|--------------------------------------------------------------------------
+| DOCUMENT PERMISSIONS
+|--------------------------------------------------------------------------
+*/
+
+$canView    = Permission::canView();
+$canEdit    = Permission::canEdit();
+$canApprove = Permission::canApprove();
+$canDelete  = Permission::canDelete();
+$canShare   = Permission::canShare();
+
+$userId = (int)($user['id'] ?? 0);
+$userRole = strtolower(trim($user['role'] ?? 'user'));
+
+/*
+|--------------------------------------------------------------------------
+| CURRENT USER DOCUMENT PERMISSIONS
+|--------------------------------------------------------------------------
+*/
+
+$canView    = Permission::canView();
+$canEdit    = Permission::canEdit();
+$canApprove = Permission::canApprove();
+$canDelete  = Permission::canDelete();
+$canShare   = Permission::canShare();
+
+if (!$canView) {
+    die("You do not have permission to view documents.");
+}
+/*
+|--------------------------------------------------------------------------
+| HELPER
+|--------------------------------------------------------------------------
+|
+| Documents created before the approval-status logic was introduced may
+| contain NULL or empty status values.
+|
+| In this application, an empty status means the document is still
+| waiting for approval.
+|
+*/
+
+function normalizeDocumentStatus($status)
+{
+    $status = strtolower(trim((string)$status));
+
+    if ($status === '') {
+        return 'pending';
+    }
+
+    if (!in_array($status, ['pending', 'approved', 'rejected'], true)) {
+        return 'pending';
+    }
+
+    return $status;
+}
+
+/*
+|--------------------------------------------------------------------------
+| STATISTICS
+|--------------------------------------------------------------------------
+*/
+
+/*
+ * Documents uploaded by me
+ */
+$totalDocuments = (int)(
+    fetchRow(
+        "SELECT COUNT(*) AS total
+         FROM documents
+         WHERE uploaded_by = ?
+         AND is_deleted = 0",
+        [$userId]
+    )['total'] ?? 0
+);
+
+
+/*
+ * Documents I approved
+ */
+$approvedDocuments = (int)(
+    fetchRow(
+        "SELECT COUNT(*) AS total
+         FROM documents
+         WHERE reviewed_by = ?
+         AND is_deleted = 0
+         AND status = 'approved'",
+        [$userId]
+    )['total'] ?? 0
+);
+
+
+/*
+ * My documents still pending
+ */
+$pendingDocuments = (int)(
+    fetchRow(
+        "SELECT COUNT(*) AS total
+         FROM documents
+         WHERE uploaded_by = ?
+         AND is_deleted = 0
+         AND (
+             status = 'pending'
+             OR status IS NULL
+             OR TRIM(status) = ''
+         )",
+        [$userId]
+    )['total'] ?? 0
+);
+
+
+/*
+ * Documents I rejected
+ */
+$rejectedDocuments = (int)(
+    fetchRow(
+        "SELECT COUNT(*) AS total
+         FROM documents
+         WHERE reviewed_by = ?
+         AND is_deleted = 0
+         AND status = 'rejected'",
+        [$userId]
+    )['total'] ?? 0
+);
+
+
+/*
+ * Documents shared by me
+ */
+$sharedDocuments = (int)(
+    fetchRow(
+        "SELECT COUNT(DISTINCT ds.document_id) AS total
+         FROM document_shares ds
+         INNER JOIN documents d
+             ON d.id = ds.document_id
+         WHERE ds.shared_by = ?
+         AND d.is_deleted = 0",
+        [$userId]
+    )['total'] ?? 0
+);
+
+
+/*
+ * Documents shared with me
+ */
+$receivedDocuments = (int)(
+    fetchRow(
+        "SELECT COUNT(DISTINCT ds.document_id) AS total
+         FROM document_shares ds
+         INNER JOIN documents d
+             ON d.id = ds.document_id
+         WHERE ds.user_id = ?
+         AND d.is_deleted = 0",
+        [$userId]
+    )['total'] ?? 0
+);
+
+/*
+|--------------------------------------------------------------------------
+| LOAD USER-RELATED DOCUMENTS
+|--------------------------------------------------------------------------
+*/
+$documents = fetchAll(
+"
+SELECT DISTINCT
+
+    doc.*,
+
+    d.name AS department_name,
+
+    CONCAT(
+        IFNULL(u.first_name, ''),
+        ' ',
+        IFNULL(u.last_name, '')
+    ) AS owner_name,
+
+    CONCAT(
+        IFNULL(su.first_name, ''),
+        ' ',
+        IFNULL(su.last_name, '')
+    ) AS shared_by_name
+
+FROM documents doc
+
+LEFT JOIN departments d
+    ON d.id = doc.department_id
+
+LEFT JOIN users u
+    ON u.id = doc.uploaded_by
+
+LEFT JOIN document_shares ds
+    ON ds.document_id = doc.id
+
+LEFT JOIN users su
+    ON su.id = ds.shared_by
+
+WHERE
+
+    /* ==========================================================
+       CRITICAL:
+       Documents in Recycle Bin must NEVER appear here.
+       ========================================================== */
+
+    COALESCE(doc.is_deleted, 0) = 0
+
+    AND
+
+    (
+        doc.uploaded_by = ?
+
+        OR doc.reviewed_by = ?
+
+        OR ds.user_id = ?
+
+        OR ds.shared_by = ?
+
+        OR doc.department_id = (
+            SELECT department_id
+            FROM users
+            WHERE id = ?
+            LIMIT 1
+        )
+
+        OR ? IN ('admin', 'administrator')
+    )
+
+ORDER BY
+
+    COALESCE(
+        doc.updated_at,
+        doc.created_at
+    ) DESC
+",
+[
+    $userId,
+    $userId,
+    $userId,
+    $userId,
+    $userId,
+    $userRole
+]
+);
+
+/*
+|--------------------------------------------------------------------------
+| LOAD RELEVANT DEPARTMENTS
+|--------------------------------------------------------------------------
+*/
+
+$departments = fetchAll(
+"
+SELECT DISTINCT
+
+    d.id,
+    d.name
+
+FROM departments d
+
+INNER JOIN documents doc
+    ON doc.department_id = d.id
+
+LEFT JOIN document_shares ds
+    ON ds.document_id = doc.id
+
+WHERE
+
+    COALESCE(doc.is_deleted, 0) = 0
+
+    AND
+
+    (
+        doc.uploaded_by = ?
+        OR doc.reviewed_by = ?
+        OR ds.shared_by = ?
+        OR ds.user_id = ?
+    )
+
+ORDER BY d.name
+",
+[
+    $userId,
+    $userId,
+    $userId,
+    $userId
+]
+);
 
 include "includes/header.php";
 include "includes/sidebar.php";
 include "includes/navbar.php";
 
-
-
-// ==============================
-// STATISTICS
-// ==============================
-
-
-$totalDocuments = countRows("
-SELECT id
-FROM documents
-");
-
-
-$approvedDocuments = countRows("
-SELECT id
-FROM documents
-WHERE status='approved'
-");
-
-
-$pendingDocuments = countRows("
-SELECT id
-FROM documents
-WHERE status='pending'
-");
-
-
-$rejectedDocuments = countRows("
-SELECT id
-FROM documents
-WHERE status='rejected'
-");
-
-
-
-
-// ==============================
-// LOAD DOCUMENTS
-// ==============================
-
-
-$documents = fetchAll("
-
-SELECT
-
-doc.*,
-
-d.name AS department_name,
-
-CONCAT(
-u.first_name,
-' ',
-u.last_name
-) AS owner_name
-
-
-FROM documents doc
-
-
-LEFT JOIN departments d
-ON d.id = doc.department_id
-
-
-LEFT JOIN users u
-ON u.id = doc.uploaded_by
-
-
-ORDER BY doc.created_at DESC
-
-
-");
-
-
-
-
-// ==============================
-// LOAD DEPARTMENTS FILTER
-// ==============================
-
-
-$departments = fetchAll("
-
-SELECT id,name
-
-FROM departments
-
-ORDER BY name
-
-");
-
-
-
 ?>
-
 
 <link rel="stylesheet" href="assets/css/documents.css">
 
 
-
 <div class="page-header">
 
+    <div>
 
-<div>
+        <h1>
+            My Documents
+        </h1>
 
-<h1>
-Documents Management
-</h1>
+        <p>
+            View and manage documents related to your account.
+        </p>
 
-
-<p>
-Manage organizational documents, approvals and sharing.
-</p>
-
-
-</div>
+    </div>
 
 
+    <a href="upload.php" class="upload-btn">
 
-<a href="upload.php" class="upload-btn">
+        <i class="fa fa-upload"></i>
 
-<i class="fa fa-upload"></i>
+        Upload Document
 
-Upload Document
-
-</a>
-
+    </a>
 
 </div>
 
 
-
-
-
-<!-- SUMMARY -->
-
+<!-- ==========================================================
+     SUMMARY
+========================================================== -->
 
 <div class="document-summary">
 
 
-<div class="summary-card blue">
+    <div class="summary-card blue">
 
-<i class="fa fa-file"></i>
+        <i class="fa fa-file"></i>
 
-<div>
+        <div>
 
-<h2><?= $totalDocuments ?></h2>
+            <h2>
+                <?= $totalDocuments ?>
+            </h2>
 
-<p>Total Documents</p>
+            <p>
+                My Documents
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="summary-card green">
+
+        <i class="fa fa-check-circle"></i>
+
+        <div>
+
+            <h2>
+                <?= $approvedDocuments ?>
+            </h2>
+
+            <p>
+                Approved by Me
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="summary-card orange">
+
+        <i class="fa fa-clock"></i>
+
+        <div>
+
+            <h2>
+                <?= $pendingDocuments ?>
+            </h2>
+
+            <p>
+                My Pending
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="summary-card red">
+
+        <i class="fa fa-times-circle"></i>
+
+        <div>
+
+            <h2>
+                <?= $rejectedDocuments ?>
+            </h2>
+
+            <p>
+                Rejected by Me
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="summary-card purple">
+
+        <i class="fa fa-share-alt"></i>
+
+        <div>
+
+            <h2>
+                <?= $sharedDocuments ?>
+            </h2>
+
+            <p>
+                Shared by Me
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="summary-card cyan">
+
+        <i class="fa fa-inbox"></i>
+
+        <div>
+
+            <h2>
+                <?= $receivedDocuments ?>
+            </h2>
+
+            <p>
+                Shared With Me
+            </p>
+
+        </div>
+
+    </div>
 
 </div>
 
-</div>
 
-
-
-
-<div class="summary-card green">
-
-<i class="fa fa-check"></i>
-
-<div>
-
-<h2><?= $approvedDocuments ?></h2>
-
-<p>Approved</p>
-
-</div>
-
-</div>
-
-
-
-
-<div class="summary-card orange">
-
-<i class="fa fa-clock"></i>
-
-<div>
-
-<h2><?= $pendingDocuments ?></h2>
-
-<p>Pending Approval</p>
-
-</div>
-
-</div>
-
-
-
-
-<div class="summary-card red">
-
-<i class="fa fa-times"></i>
-
-<div>
-
-<h2><?= $rejectedDocuments ?></h2>
-
-<p>Rejected</p>
-
-</div>
-
-</div>
-
-
-</div>
-
-
-
-
-
-
-
-<!-- FILTERS -->
-
+<!-- ==========================================================
+     FILTERS
+========================================================== -->
 
 <div class="document-controls">
 
 
-<div class="search-box">
+    <div class="search-box">
 
-<i class="fa fa-search"></i>
+        <i class="fa fa-search"></i>
 
+        <input
+            type="text"
+            id="documentSearch"
+            placeholder="Search my documents..."
+        >
 
-<input
-
-type="text"
-
-id="documentSearch"
-
-placeholder="Search documents...">
-
-
-</div>
+    </div>
 
 
+    <select id="departmentFilter">
+
+        <option value="">
+            All My Departments
+        </option>
+
+        <?php foreach($departments as $dept){ ?>
+
+            <option
+                value="<?= htmlspecialchars(
+                    strtolower($dept['name']),
+                    ENT_QUOTES
+                ) ?>"
+            >
+                <?= htmlspecialchars($dept['name']) ?>
+            </option>
+
+        <?php } ?>
+
+    </select>
 
 
-<select id="departmentFilter">
+    <select id="statusFilter">
 
+        <option value="">
+            All Status
+        </option>
 
-<option value="">
-All Departments
-</option>
+        <option value="approved">
+            Approved
+        </option>
 
+        <option value="pending">
+            Pending
+        </option>
 
+        <option value="rejected">
+            Rejected
+        </option>
 
-<?php foreach($departments as $dept){ ?>
-
-
-<option value="<?= strtolower($dept['name']) ?>">
-
-<?= htmlspecialchars($dept['name']) ?>
-
-</option>
-
-
-<?php } ?>
-
-
-</select>
-
-
-
-
-
-<select id="statusFilter">
-
-
-<option value="">
-All Status
-</option>
-
-<option value="approved">
-Approved
-</option>
-
-<option value="pending">
-Pending
-</option>
-
-<option value="rejected">
-Rejected
-</option>
-
-
-</select>
-
-
+    </select>
 
 </div>
 
 
-
-
-
-
-
-
+<!-- ==========================================================
+     DOCUMENT TABLE
+========================================================== -->
 
 <div class="document-card">
 
+    <table>
 
-<table>
+        <thead>
 
+            <tr>
 
-<thead>
+                <th>Document</th>
+                <th>Department</th>
+                <th>Owner</th>
+                <th>Status</th>
+                <th>Version</th>
+                <th>Date</th>
+                <th>Actions</th>
 
-<tr>
+            </tr>
 
-<th>
-Document
-</th>
-
-<th>
-Department
-</th>
-
-<th>
-Owner
-</th>
-
-<th>
-Status
-</th>
-
-<th>
-Version
-</th>
-
-<th>
-Date
-</th>
-
-<th>
-Actions
-</th>
+        </thead>
 
 
-</tr>
-
-</thead>
+        <tbody id="documentsTable">
 
 
+        <?php if(empty($documents)){ ?>
 
-<tbody id="documentsTable">
+            <tr>
+
+                <td
+                    colspan="7"
+                    style="text-align:center;padding:30px;"
+                >
+
+                    <i class="fa fa-folder-open"></i>
+
+                    <p>
+                        No documents are related to your account yet.
+                    </p>
+
+                </td>
+
+            </tr>
+
+        <?php } ?>
 
 
+        <?php foreach($documents as $doc){ ?>
 
-<?php foreach($documents as $doc){ ?>
+            <?php
+
+            /*
+             * ==========================================================
+             * NORMALIZE STATUS
+             * ==========================================================
+             *
+             * This is the important fix.
+             *
+             * Database:
+             *
+             * NULL       -> pending
+             * ''         -> pending
+             * pending    -> pending
+             * approved   -> approved
+             * rejected   -> rejected
+             *
+             */
+
+            $status = normalizeDocumentStatus(
+                $doc['status'] ?? null
+            );
 
 
-<tr
+            $title =
+                $doc['title'] ?? 'Untitled Document';
 
-data-name="<?= strtolower($doc['title']) ?>"
+            $department =
+                $doc['department_name'] ?? 'No Department';
 
-data-department="<?= strtolower($doc['department_name']) ?>"
+            $owner =
+                trim($doc['owner_name'] ?? '');
 
-data-status="<?= strtolower($doc['status']) ?>">
+            if ($owner === '') {
+                $owner = '-';
+            }
 
 
+            /*
+             * FILE TYPE
+             */
+
+            $fileType = strtolower(
+                trim($doc['file_type'] ?? '')
+            );
 
 
+            /*
+             * FILE PATH
+             */
+
+            $filePath = trim(
+                $doc['file_path'] ?? ''
+            );
+
+
+            /*
+             * EXTENSION
+             */
+
+            $parsedPath = parse_url(
+                $filePath,
+                PHP_URL_PATH
+            );
+
+            $fileExtension = strtolower(
+                pathinfo(
+                    $parsedPath ?: $filePath,
+                    PATHINFO_EXTENSION
+                )
+            );
+
+
+            /*
+             * OFFICE FILES
+             */
+
+            $wordExtensions = [
+                'doc',
+                'docx'
+            ];
+
+            $excelExtensions = [
+                'xls',
+                'xlsx',
+                'csv'
+            ];
+
+
+            $isWord = in_array(
+                $fileExtension,
+                $wordExtensions,
+                true
+            );
+
+
+            $isExcel = in_array(
+                $fileExtension,
+                $excelExtensions,
+                true
+            );
+
+
+            /*
+             * DOCUMENT URL
+             */
+
+            if (
+                preg_match(
+                    '#^https?://#i',
+                    $filePath
+                )
+            ) {
+
+                $documentUrl = $filePath;
+
+            } else {
+
+                $documentUrl =
+                    rtrim(APP_URL, '/') .
+                    '/' .
+                    ltrim($filePath, '/');
+
+            }
+
+
+            /*
+             * FORCE LOCALHOST HTTP
+             */
+
+            $documentUrl = preg_replace(
+                '#^https://localhost#i',
+                'http://localhost',
+                $documentUrl
+            );
+
+
+            /*
+             * FILE ICON
+             */
+
+            $fileIcon = 'fa-file';
+
+
+            if (
+                str_contains($fileType, 'pdf') ||
+                $fileExtension === 'pdf'
+            ) {
+
+                $fileIcon = 'fa-file-pdf pdf';
+
+            } elseif (
+                str_contains($fileType, 'word') ||
+                str_contains($fileType, 'doc') ||
+                $isWord
+            ) {
+
+                $fileIcon = 'fa-file-word word';
+
+            } elseif (
+                str_contains($fileType, 'excel') ||
+                str_contains($fileType, 'sheet') ||
+                str_contains($fileType, 'xls') ||
+                $isExcel
+            ) {
+
+                $fileIcon = 'fa-file-excel';
+
+            } elseif (
+                str_contains($fileType, 'image') ||
+                str_contains($fileType, 'jpg') ||
+                str_contains($fileType, 'jpeg') ||
+                str_contains($fileType, 'png')
+            ) {
+
+                $fileIcon = 'fa-file-image';
+
+            }
+
+            ?>
+
+
+            <tr
+
+                data-name="<?= htmlspecialchars(
+                    strtolower($title),
+                    ENT_QUOTES
+                ) ?>"
+
+                data-department="<?= htmlspecialchars(
+                    strtolower($department),
+                    ENT_QUOTES
+                ) ?>"
+
+                data-status="<?= htmlspecialchars(
+                    $status,
+                    ENT_QUOTES
+                ) ?>"
+            >
+
+
+                <!-- DOCUMENT -->
+
+                <td>
+
+                    <i class="fa <?= $fileIcon ?>"></i>
+
+                    <?= htmlspecialchars($title) ?>
+
+                </td>
+
+
+                <!-- DEPARTMENT -->
+
+                <td>
+
+                    <?= htmlspecialchars($department) ?>
+
+                </td>
+
+
+                <!-- OWNER -->
+
+                <td>
+
+                    <?= htmlspecialchars($owner) ?>
+
+
+                    <?php if (!empty($doc['shared_by_name'])) { ?>
+
+                        <div style="
+                            font-size:12px;
+                            color:#777;
+                            margin-top:4px;
+                        ">
+
+                            <i class="fa fa-share"></i>
+
+                            Shared by
+
+                            <strong>
+                                <?= htmlspecialchars(
+                                    trim($doc['shared_by_name'])
+                                ) ?>
+                            </strong>
+
+                        </div>
+
+                    <?php } ?>
+
+                </td>
+
+
+                <!-- STATUS -->
+
+                <td>
+
+                    <?php
+
+                    /*
+                     * Status label is now guaranteed to contain
+                     * pending / approved / rejected.
+                     */
+
+                    $statusLabel = ucfirst($status);
+
+                    ?>
+
+                    <span
+                        class="status <?= htmlspecialchars(
+                            $status,
+                            ENT_QUOTES
+                        ) ?>"
+                    >
+
+                        <?= htmlspecialchars($statusLabel) ?>
+
+                    </span>
+
+                </td>
+
+
+                <!-- VERSION -->
+
+                <td>
+
+                    v<?= htmlspecialchars(
+                        $doc['version'] ?? '1'
+                    ) ?>
+
+                </td>
+
+
+                <!-- DATE -->
+
+                <td>
+
+                    <?= !empty($doc['created_at'])
+
+                        ? date(
+                            "d M Y",
+                            strtotime($doc['created_at'])
+                        )
+
+                        : '-'
+
+                    ?>
+
+                </td>
+
+
+               <!-- ACTIONS -->
 
 <td>
 
+    <!-- ==================================================
+         VIEW / DOWNLOAD
+    =================================================== -->
 
-<i class="fa 
-<?php
+    <?php if ($canView && !empty($doc['file_path'])) { ?>
 
-$type=strtolower($doc['file_type']);
+        <?php if ($isWord): ?>
 
+            <a
+                href="ms-word:ofe|u|<?= htmlspecialchars(
+                    $documentUrl,
+                    ENT_QUOTES
+                ) ?>"
+                class="action view"
+                title="Open with Microsoft Word"
+            >
 
-if(str_contains($type,'pdf')){
+                <i class="fa fa-eye"></i>
 
-echo 'fa-file-pdf pdf';
+            </a>
 
-}elseif(
-str_contains($type,'word')
-){
+        <?php elseif ($isExcel): ?>
 
-echo 'fa-file-word word';
+            <a
+                href="ms-excel:ofe|u|<?= htmlspecialchars(
+                    $documentUrl,
+                    ENT_QUOTES
+                ) ?>"
+                class="action view"
+                title="Open with Microsoft Excel"
+            >
 
-}else{
+                <i class="fa fa-eye"></i>
 
-echo 'fa-file';
+            </a>
 
-}
+        <?php else: ?>
 
-?>">
+            <a
+                href="<?= htmlspecialchars(
+                    $documentUrl,
+                    ENT_QUOTES
+                ) ?>"
+                target="_blank"
+                class="action view"
+                title="View Document"
+            >
 
-</i>
+                <i class="fa fa-eye"></i>
 
+            </a>
 
-<?= htmlspecialchars($doc['title']) ?>
+        <?php endif; ?>
 
 
-</td>
+        <!-- DOWNLOAD -->
 
+        <a
+            download
+            href="<?= htmlspecialchars(
+                $documentUrl,
+                ENT_QUOTES
+            ) ?>"
+            class="action download"
+            title="Download Document"
+        >
 
+            <i class="fa fa-download"></i>
 
+        </a>
 
+    <?php } ?>
 
-<td>
 
-<?= htmlspecialchars($doc['department_name']) ?>
+    <!-- APPROVE / REJECT -->
 
-</td>
+    <?php if (
+        $canApprove &&
+        $status === 'pending'
+    ) { ?>
 
+        <button
+            type="button"
+            class="action approve"
+            title="Approve Document"
+            onclick="approveDocument(
+                <?= (int)$doc['id'] ?>
+            )"
+        >
 
+            <i class="fa fa-check"></i>
 
+        </button>
 
-<td>
 
-<?= htmlspecialchars($doc['owner_name'] ?? '-') ?>
+        <button
+            type="button"
+            class="action reject"
+            title="Reject Document"
+            onclick="rejectDocument(
+                <?= (int)$doc['id'] ?>
+            )"
+        >
 
-</td>
+            <i class="fa fa-times"></i>
 
+        </button>
 
+    <?php } ?>
 
 
+    <!-- SHARE -->
 
-<td>
+    <?php if ($canShare) { ?>
 
+        <button
+            type="button"
+            class="action share"
+            title="Share Document"
+            onclick="shareDocument(
+                <?= (int)$doc['id'] ?>
+            )"
+        >
 
-<span class="status <?= $doc['status'] ?>">
+            <i class="fa fa-share"></i>
 
-<?= ucfirst($doc['status']) ?>
+        </button>
 
+    <?php } ?>
 
-</span>
 
+    <!-- DELETE -->
 
-</td>
-
-
-
-
-
-<td>
-
-v<?= htmlspecialchars($doc['version']) ?>
-
-</td>
-
-
-
-
-<td>
-
-<?= date(
-"d M Y",
-strtotime($doc['created_at'])
-) ?>
-
-
-</td>
-
-
-
-
-
-
-<td>
-
-
-<a
-
-href="<?= $doc['file_path'] ?>"
-
-target="_blank"
-
-class="action view">
-
-<i class="fa fa-eye"></i>
-
-</a>
-
-
-
-
-
-<a
-
-download
-
-href="<?= $doc['file_path'] ?>"
-
-class="action download">
-
-<i class="fa fa-download"></i>
-
-</a>
-
-
-
-<?php if(
-($user['role']=="admin" || $user['role']=="manager")
-&&
-$doc['status']=="pending"
-){ ?>
-
+    <?php if($canDelete){ ?>
 
 <button
-
-class="action approve"
-
-onclick="approveDocument(
-<?= $doc['id'] ?>
-)">
-
-<i class="fa fa-check"></i>
-
+    type="button"
+    class="action delete"
+    title="Move to Recycle Bin"
+    onclick="deleteDocument(
+        <?= (int)$doc['id'] ?>,
+        '<?= htmlspecialchars(
+            $title,
+            ENT_QUOTES
+        ) ?>'
+    )"
+>
+    <i class="fa fa-trash"></i>
 </button>
-
-
-
-<button
-
-class="action reject"
-
-onclick="rejectDocument(
-<?= $doc['id'] ?>
-)">
-
-<i class="fa fa-times"></i>
-
-</button>
-
 
 <?php } ?>
 
-<button
-
-class="action delete"
-
-onclick="deleteDocument(
-<?= $doc['id'] ?>,
-'<?= htmlspecialchars($doc['title'],ENT_QUOTES) ?>'
-)">
-
-
-<i class="fa fa-trash"></i>
-
-
-</button>
-
-
-
-
-<button
-
-class="action share"
-
-onclick="shareDocument(
-<?= $doc['id'] ?>
-)">
-
-
-<i class="fa fa-share"></i>
-
-
-</button>
-
-
-
-
 </td>
 
+            </tr>
 
 
-</tr>
+        <?php } ?>
 
 
-<?php } ?>
+        </tbody>
 
-
-
-</tbody>
-
-
-</table>
-
+    </table>
 
 </div>
 
 
-
-
-
 <script src="assets/js/documents.js"></script>
-
 
 
 <?php

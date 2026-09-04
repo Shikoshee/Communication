@@ -2,12 +2,8 @@
 
 require_once 'includes/config.php';
 require_once 'includes/auth.php';
-require_once 'includes/Permission.php';
 Auth::protect();
 
-if (!Permission::canUpload()) {
-    die("You do not have permission to upload documents");
-}
 
 $user = Auth::getCurrentUser();
 
@@ -73,16 +69,9 @@ Add new documents to the communication system.
 
 </div>
 
-
-
-
-
 <div class="upload-container">
 
-
 <form id="uploadForm" enctype="multipart/form-data">
-
-
 
 <div class="form-group">
 
@@ -105,44 +94,32 @@ required>
 
 <div class="form-group">
 
-<label>
-Department
-</label>
+    <label>
+        Departments
+    </label>
 
+    <select
+        id="department"
+        name="department_id[]"
+        multiple
+        required
+    >
 
-<select 
-id="department"
-name="department_id"
-required>
+        <?php foreach($departments as $dept){ ?>
 
+            <option value="<?= $dept['id'] ?>">
+                <?= htmlspecialchars($dept['name']) ?>
+            </option>
 
-<option value="">
-Select Department
-</option>
+        <?php } ?>
 
+    </select>
 
-<?php foreach($departments as $dept){ ?>
-
-
-<option value="<?= $dept['id'] ?>">
-
-<?= htmlspecialchars($dept['name']) ?>
-
-</option>
-
-
-<?php } ?>
-
-
-</select>
-
+    <small>
+        Hold CTRL (Windows) or CMD (Mac) to select multiple departments
+    </small>
 
 </div>
-
-
-
-
-
 
 
 <div class="form-group">
@@ -165,22 +142,13 @@ rows="5">
 
 </div>
 
-
-
-
-
-
-
 <div class="form-group">
-
 
 <label>
 Tags
 </label>
 
-
 <input
-
 type="text"
 
 id="tags"
@@ -191,25 +159,15 @@ name="tags">
 </div>
 
 
-
-
-
-
-
 <div class="form-group">
-
 
 <label>
 Select File
 </label>
 
-
-
 <div class="file-upload">
 
-
 <i class="fa fa-cloud-upload"></i>
-
 
 <input
 

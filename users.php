@@ -1,184 +1,575 @@
 <?php
+
 require_once 'includes/config.php';
 require_once 'includes/auth.php';
 
 Auth::protect();
+
 $user = Auth::getCurrentUser();
+
+
+/*
+ * ==========================================================
+ * CURRENT USER / ROLE
+ * ==========================================================
+ */
+
+$userId = (int)($user['id'] ?? 0);
+
+$userRole = strtolower(
+    trim(
+        (string)($user['role'] ?? 'user')
+    )
+);
+
+$isAdmin = in_array(
+    $userRole,
+    [
+        'admin',
+        'administrator'
+    ],
+    true
+);
+
+$isManager = (
+    $userRole === 'manager'
+    ||
+    str_contains($userRole, 'manager')
+);
+
+
+/*
+ * ==========================================================
+ * ACCESS
+ * ==========================================================
+ */
+
+if (!$isAdmin && !$isManager) {
+
+    die("Access Denied.");
+
+}
+
+
+/*
+ * ==========================================================
+ * GET MANAGER DEPARTMENT
+ * ==========================================================
+ */
+
+$departmentId = (int)(
+    $user['department_id'] ?? 0
+);
+
+
+/*
+ * Some sessions may not contain department_id.
+ * Get it directly from the database.
+ */
+
+if ($isManager && $departmentId <= 0) {
+
+    $departmentRow = fetchRow(
+
+        "SELECT department_id
+         FROM users
+         WHERE id=?
+         LIMIT 1",
+
+        [
+            $userId
+        ]
+
+    );
+
+    $departmentId = (int)(
+        $departmentRow['department_id'] ?? 0
+    );
+
+}
+
+
+/*
+ * ==========================================================
+ * MANAGER MUST HAVE DEPARTMENT
+ * ==========================================================
+ */
+
+if ($isManager && $departmentId <= 0) {
+
+    die(
+        "Your account is not assigned to a department."
+    );
+
+}
+
+
+/*
+ * ==========================================================
+ * PAGE
+ * ==========================================================
+ */
 
 include "includes/header.php";
 include "includes/sidebar.php";
 include "includes/navbar.php";
 
 $pageTitle = "Users Management";
-$breadcrumb = "Dashboard / Users";
+
+$breadcrumb = $isAdmin
+    ? "Dashboard / Users"
+    : "Dashboard / Department Users";
+
 $buttonText = "Add User";
+
 $buttonLink = "javascript:addUser();";
 
 include "includes/page-header.php";
 
 
-// =====================================
-// SUMMARY
-// =====================================
+/*
+ * ==========================================================
+ * SUMMARY
+ * ==========================================================
+ */
 
-$totalUsers = countRows("
-    SELECT id
-    FROM users
-");
+if ($isAdmin) {
 
-$activeUsers = countRows("
-    SELECT id
-    FROM users
-    WHERE status='active'
-");
+    /*
+     * ADMIN:
+     * Organization-wide statistics.
+     */
 
-$inactiveUsers = countRows("
-    SELECT id
-    FROM users
-    WHERE status='inactive'
-");
+    $totalUsers = countRows("
+        SELECT id
+        FROM users
+    ");
 
-$lockedUsers = countRows("
-    SELECT id
-    FROM users
-    WHERE status='locked'
-");
+    $activeUsers = countRows("
+        SELECT id
+        FROM users
+        WHERE status='active'
+    ");
+
+    $inactiveUsers = countRows("
+        SELECT id
+        FROM users
+        WHERE status='inactive'
+    ");
+
+    $lockedUsers = countRows("
+        SELECT id
+        FROM users
+        WHERE status='locked'
+    ");
+
+} else {
+
+    /*
+     * MANAGER:
+     * Statistics for manager's department only.
+     */
+
+    $totalUsers = countRows(
+        "
+        SELECT id
+        FROM users
+        WHERE department_id=?
+        ",
+        [
+            $departmentId
+        ]
+    );
+
+    $activeUsers = countRows(
+        "
+        SELECT id
+        FROM users
+        WHERE department_id=?
+        AND status='active'
+        ",
+        [
+            $departmentId
+        ]
+    );
+
+    $inactiveUsers = countRows(
+        "
+        SELECT id
+        FROM users
+        WHERE department_id=?
+        AND status='inactive'
+        ",
+        [
+            $departmentId
+        ]
+    );
+
+    $lockedUsers = countRows(
+        "
+        SELECT id
+        FROM users
+        WHERE department_id=?
+        AND status='locked'
+        ",
+        [
+            $departmentId
+        ]
+    );
+
+}
 
 
-// =====================================
-// DEPARTMENTS
-// =====================================
+/*
+ * ==========================================================
+ * DEPARTMENTS
+ * ==========================================================
+ *
+ * ADMIN:
+ *     All departments.
+ *
+ * MANAGER:
+ *     Own department only.
+ */
 
-$departments = fetchAll("
-    SELECT id,name
-    FROM departments
-    ORDER BY name
-");
+if ($isAdmin) {
+
+    $departments = fetchAll("
+        SELECT
+            id,
+            name
+        FROM departments
+        ORDER BY name
+    ");
+
+} else {
+
+    $departments = fetchAll(
+        "
+        SELECT
+            id,
+            name
+        FROM departments
+        WHERE id=?
+        ORDER BY name
+        ",
+        [
+            $departmentId
+        ]
+    );
+
+}
 
 
-// =====================================
-// USERS
-// =====================================
+/*
+ * ==========================================================
+ * USERS
+ * ==========================================================
+ *
+ * ADMIN:
+ *     All users.
+ *
+ * MANAGER:
+ *     Users in manager's department only.
+ */
 
-$users = fetchAll("
+if ($isAdmin) {
 
-SELECT
+    $users = fetchAll("
 
-u.*,
+        SELECT
 
-d.name AS department_name
+            u.*,
 
-FROM users u
+            d.name AS department_name
 
-LEFT JOIN departments d
-ON d.id=u.department_id
+        FROM users u
 
-ORDER BY
+        LEFT JOIN departments d
+            ON d.id = u.department_id
 
-u.first_name,
-u.last_name
+        ORDER BY
+            u.first_name,
+            u.last_name
 
-");
+    ");
+
+} else {
+
+    $users = fetchAll(
+        "
+
+        SELECT
+
+            u.*,
+
+            d.name AS department_name
+
+        FROM users u
+
+        LEFT JOIN departments d
+            ON d.id = u.department_id
+
+        WHERE u.department_id=?
+
+        ORDER BY
+            u.first_name,
+            u.last_name
+
+        ",
+        [
+            $departmentId
+        ]
+    );
+
+}
 
 
-// =====================================
-// CHART
-// =====================================
-
-$chartData = fetchAll("
-
-SELECT
-
-d.name,
-COUNT(u.id) total_users
-
-FROM departments d
-
-LEFT JOIN users u
-ON u.department_id=d.id
-
-GROUP BY d.id
-
-ORDER BY d.name
-
-");
+/*
+ * ==========================================================
+ * CHART
+ * ==========================================================
+ *
+ * ADMIN ONLY
+ *
+ * Managers do not need chart data because they only
+ * manage users within their own department.
+ */
 
 $chartLabels = [];
 $chartValues = [];
 
-foreach($chartData as $row){
+if ($isAdmin) {
 
-    $chartLabels[] = $row['name'];
-    $chartValues[] = (int)$row['total_users'];
+    $chartData = fetchAll("
+
+        SELECT
+
+            d.name,
+
+            COUNT(u.id) AS total_users
+
+        FROM departments d
+
+        LEFT JOIN users u
+            ON u.department_id = d.id
+
+        GROUP BY
+            d.id,
+            d.name
+
+        ORDER BY
+            d.name
+
+    ");
+
+    foreach ($chartData as $row) {
+
+        $chartLabels[] = $row['name'];
+
+        $chartValues[] = (int)$row['total_users'];
+
+    }
+
+}
+
+/*
+ * ==========================================================
+ * MANAGER DEPARTMENT NAME
+ * ==========================================================
+ */
+
+$managerDepartmentName = '';
+
+if ($isManager) {
+
+    $managerDepartment = fetchRow(
+        "
+        SELECT name
+        FROM departments
+        WHERE id=?
+        LIMIT 1
+        ",
+        [
+            $departmentId
+        ]
+    );
+
+    $managerDepartmentName =
+        $managerDepartment['name']
+        ?? 'Your Department';
 
 }
 
 ?>
 
 <link rel="stylesheet" href="assets/css/users.css">
+<link rel="stylesheet" href="assets/css/users.css?v=2">
 
 
-<!-- ===================== -->
-<!-- SUMMARY -->
-<!-- ===================== -->
+<!-- ==========================================================
+     SUMMARY
+     ========================================================== -->
 
 <div class="user-summary">
 
+
+    <!-- TOTAL USERS -->
+
     <div class="summary-card blue">
+
         <i class="fa-solid fa-users"></i>
+
         <div>
-            <h2><?= $totalUsers ?></h2>
-            <p>Total Users</p>
+
+            <h2>
+                <?= (int)$totalUsers ?>
+            </h2>
+
+            <p>
+                <?= $isAdmin
+                    ? 'Total Users'
+                    : 'Department Users'
+                ?>
+            </p>
+
         </div>
+
     </div>
+
+
+    <!-- ACTIVE USERS -->
 
     <div class="summary-card green">
+
         <i class="fa-solid fa-user-check"></i>
+
         <div>
-            <h2><?= $activeUsers ?></h2>
-            <p>Active Users</p>
+
+            <h2>
+                <?= (int)$activeUsers ?>
+            </h2>
+
+            <p>
+                Active Users
+            </p>
+
         </div>
+
     </div>
+
+
+    <!-- INACTIVE USERS -->
 
     <div class="summary-card orange">
+
         <i class="fa-solid fa-user-xmark"></i>
+
         <div>
-            <h2><?= $inactiveUsers ?></h2>
-            <p>Inactive Users</p>
+
+            <h2>
+                <?= (int)$inactiveUsers ?>
+            </h2>
+
+            <p>
+                Inactive Users
+            </p>
+
         </div>
+
     </div>
 
+
+    <!-- LOCKED USERS -->
+
     <div class="summary-card red">
+
         <i class="fa-solid fa-user-lock"></i>
+
         <div>
-            <h2><?= $lockedUsers ?></h2>
-            <p>Locked Accounts</p>
+
+            <h2>
+                <?= (int)$lockedUsers ?>
+            </h2>
+
+            <p>
+                Locked Accounts
+            </p>
+
         </div>
+
     </div>
 
 </div>
 
 
+<!-- ==========================================================
+     MANAGER DEPARTMENT NOTICE
+     ========================================================== -->
 
-<!-- ===================== -->
-<!-- TOOLBAR -->
-<!-- ===================== -->
+<?php if ($isManager) { ?>
+
+    <div
+        class="permission-scope"
+        style="margin-bottom:20px;"
+    >
+
+        <i class="fa fa-building"></i>
+
+        Viewing users in:
+
+        <strong>
+            <?= htmlspecialchars(
+                $managerDepartmentName
+            ) ?>
+        </strong>
+
+    </div>
+
+<?php } ?>
+
+
+<!-- ==========================================================
+     TOOLBAR
+     ========================================================== -->
 
 <div class="user-toolbar">
 
     <input
         type="text"
         id="userSearch"
-        placeholder="Search users...">
+        placeholder="Search users..."
+    >
+
 
     <select id="departmentFilter">
 
-        <option value="">All Departments</option>
+        <?php if ($isAdmin) { ?>
 
-        <?php foreach($departments as $department){ ?>
+            <option value="">
+                All Departments
+            </option>
 
-            <option value="<?= $department['id'] ?>">
-                <?= htmlspecialchars($department['name']) ?>
+        <?php } ?>
+
+
+        <?php foreach ($departments as $department) { ?>
+
+            <option
+                value="<?= (int)$department['id'] ?>"
+                <?= (
+                    $isManager
+                    && (int)$department['id'] === $departmentId
+                )
+                    ? 'selected'
+                    : ''
+                ?>
+            >
+
+                <?= htmlspecialchars(
+                    $department['name']
+                ) ?>
+
             </option>
 
         <?php } ?>
@@ -188,162 +579,318 @@ foreach($chartData as $row){
 </div>
 
 
-
-<!-- ===================== -->
-<!-- TABLE -->
-<!-- ===================== -->
+<!-- ==========================================================
+     USERS TABLE
+     ========================================================== -->
 
 <div class="user-table">
 
-<h3>System Users</h3>
+    <h3>
 
-<table>
+        <?= $isAdmin
+            ? 'System Users'
+            : 'Department Users'
+        ?>
 
-<thead>
+    </h3>
 
-<tr>
 
-<th>Photo</th>
-<th>Name</th>
-<th>Email</th>
-<th>Department</th>
-<th>Role</th>
-<th>Status</th>
-<th>Last Login</th>
-<th>Actions</th>
+    <table>
 
-</tr>
+        <thead>
 
-</thead>
+            <tr>
 
-<tbody id="usersTable">
+                <th>Users</th>
 
-<?php foreach($users as $u){ ?>
+                <th>Name</th>
 
-<tr
-data-name="<?= strtolower($u['first_name'].' '.$u['last_name']) ?>"
-data-department="<?= $u['department_id'] ?>">
+                <th>Email</th>
 
-<td>
+                <th>Department</th>
 
-<img
-class="profile-photo"
-src="<?= !empty($u['profile_photo']) ? htmlspecialchars($u['profile_photo']) : 'assets/images/default-user.png' ?>">
+                <th>Role</th>
 
-</td>
+                <th>Status</th>
 
-<td>
+                <th>Last Login</th>
 
-<?= htmlspecialchars($u['first_name'].' '.$u['last_name']) ?>
+                <th>Actions</th>
 
-</td>
+            </tr>
 
-<td>
+        </thead>
 
-<?= htmlspecialchars($u['email']) ?>
 
-</td>
+        <tbody id="usersTable">
 
-<td>
+        <?php foreach ($users as $u) { ?>
 
-<?= htmlspecialchars($u['department_name'] ?? '-') ?>
+            <?php
 
-</td>
+            $fullName =
+                trim(
+                    ($u['first_name'] ?? '')
+                    . ' '
+                    . ($u['last_name'] ?? '')
+                );
 
-<td>
+            $searchName = strtolower(
+                $fullName
+            );
 
-<span class="role <?= strtolower($u['role']) ?>">
 
-<?= ucfirst($u['role']) ?>
+            ?>
 
-</span>
+            <tr
 
-</td>
+                data-name="<?= htmlspecialchars(
+                    $searchName,
+                    ENT_QUOTES
+                ) ?>"
 
-<td>
+                data-department="<?= (int)(
+                    $u['department_id'] ?? 0
+                ) ?>"
 
-<span class="status <?= strtolower($u['status']) ?>">
+            >
 
-<?= ucfirst($u['status']) ?>
 
-</span>
+                <!-- PHOTO -->
 
-</td>
+                <td>
 
-<td>
-
-<?= $u['last_login']
-    ? date("d M Y H:i",strtotime($u['last_login']))
-    : "-" ?>
+    <div class="user-avatar">
+        <i class="fa-solid fa-user"></i>
+    </div>
 
 </td>
 
-<td>
 
-<button class="view-btn"
-onclick="viewUser(<?= $u['id'] ?>)">
-<i class="fa fa-eye"></i>
-</button>
+                <!-- NAME -->
 
-<button
-class="edit-btn"
-onclick="editUser(<?= $u['id'] ?>)">
-<i class="fa fa-edit"></i>
-</button>
+                <td>
 
-<button
-class="reset-btn"
-onclick="resetPassword(<?= $u['id'] ?>)">
-<i class="fa fa-key"></i>
-</button>
+                    <?= htmlspecialchars(
+                        $fullName
+                    ) ?>
 
-<button
-class="lock-btn"
-onclick="lockUser(<?= $u['id'] ?>)">
-<i class="fa fa-lock"></i>
-</button>
+                </td>
 
-<button
-class="delete-btn"
-onclick="deleteUser(<?= $u['id'] ?>,'<?= htmlspecialchars($u['first_name'].' '.$u['last_name'],ENT_QUOTES) ?>')">
-<i class="fa fa-trash"></i>
-</button>
 
-</td>
+                <!-- EMAIL -->
 
-</tr>
+                <td>
+
+                    <?= htmlspecialchars(
+                        $u['email'] ?? '-'
+                    ) ?>
+
+                </td>
+
+
+                <!-- DEPARTMENT -->
+
+                <td>
+
+                    <?= htmlspecialchars(
+                        $u['department_name'] ?? '-'
+                    ) ?>
+
+                </td>
+
+
+                <!-- ROLE -->
+
+                <td>
+
+                    <span
+                        class="role <?= htmlspecialchars(
+                            strtolower(
+                                (string)($u['role'] ?? '')
+                            ),
+                            ENT_QUOTES
+                        ) ?>"
+                    >
+
+                        <?= htmlspecialchars(
+                            ucfirst(
+                                (string)($u['role'] ?? '')
+                            )
+                        ) ?>
+
+                    </span>
+
+                </td>
+
+
+                <!-- STATUS -->
+
+                <td>
+
+                    <span
+                        class="status <?= htmlspecialchars(
+                            strtolower(
+                                (string)($u['status'] ?? '')
+                            ),
+                            ENT_QUOTES
+                        ) ?>"
+                    >
+
+                        <?= htmlspecialchars(
+                            ucfirst(
+                                (string)($u['status'] ?? '')
+                            )
+                        ) ?>
+
+                    </span>
+
+                </td>
+
+
+                <!-- LAST LOGIN -->
+
+                <td>
+
+                    <?php if (!empty($u['last_login'])) { ?>
+
+                        <?= date(
+                            "d M Y H:i",
+                            strtotime(
+                                $u['last_login']
+                            )
+                        ) ?>
+
+                    <?php } else { ?>
+
+                        -
+
+                    <?php } ?>
+
+                </td>
+
+
+                <!-- ACTIONS -->
+
+                <td>
+
+                    <button
+                        class="view-btn"
+                        onclick="viewUser(
+                            <?= (int)$u['id'] ?>
+                        )"
+                    >
+
+                        <i class="fa fa-eye"></i>
+
+                    </button>
+
+
+                    <button
+                        class="edit-btn"
+                        onclick="editUser(
+                            <?= (int)$u['id'] ?>
+                        )"
+                    >
+
+                        <i class="fa fa-edit"></i>
+
+                    </button>
+
+
+                    <button
+                        class="reset-btn"
+                        onclick="resetPassword(
+                            <?= (int)$u['id'] ?>
+                        )"
+                    >
+
+                        <i class="fa fa-key"></i>
+
+                    </button>
+
+
+                    <button
+                        class="lock-btn"
+                        onclick="lockUser(
+                            <?= (int)$u['id'] ?>
+                        )"
+                    >
+
+                        <i class="fa fa-lock"></i>
+
+                    </button>
+
+
+                    <button
+                        class="delete-btn"
+                        onclick="deleteUser(
+                            <?= (int)$u['id'] ?>,
+                            '<?= htmlspecialchars(
+                                $fullName,
+                                ENT_QUOTES
+                            ) ?>'
+                        )"
+                    >
+
+                        <i class="fa fa-trash"></i>
+
+                    </button>
+
+                </td>
+
+            </tr>
+
+        <?php } ?>
+
+        </tbody>
+
+    </table>
+
+</div>
+
+
+<!-- ==========================================================
+     CHART
+     ========================================================== -->
+<?php if ($isAdmin) { ?>
+
+    <!-- ==========================================================
+         ADMIN ONLY — USERS BY DEPARTMENT CHART
+         ========================================================== -->
+
+    <div class="user-chart">
+
+        <h3>
+            Users by Department
+        </h3>
+
+        <canvas id="userChart"></canvas>
+
+    </div>
 
 <?php } ?>
-
-</tbody>
-
-</table>
-
-</div>
-
-
-
-<!-- ===================== -->
-<!-- CHART -->
-<!-- ===================== -->
-
-<div class="user-chart">
-
-<h3>Users by Department</h3>
-
-<canvas id="userChart"></canvas>
-
-</div>
-
 
 
 <script>
 
-const userChartLabels = <?= json_encode($chartLabels) ?>;
-const userChartValues = <?= json_encode($chartValues) ?>;
+const userChartLabels =
+    <?= json_encode($chartLabels) ?>;
+
+const userChartValues =
+    <?= json_encode($chartValues) ?>;
+
+const currentUserRole =
+    <?= json_encode($userRole) ?>;
+
+const currentDepartmentId =
+    <?= json_encode($departmentId) ?>;
 
 </script>
 
+
 <script src="assets/js/users.js"></script>
 
+
 <?php include "includes/footer.php"; ?>
+

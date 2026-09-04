@@ -6,74 +6,383 @@ require_once 'includes/Permission.php';
 
 Auth::protect();
 
-if (!Auth::isAdmin()) {
-    die("Access Denied");
-}
-
 $user = Auth::getCurrentUser();
 
+$userId = (int)($user['id'] ?? 0);
 
-// ======================================
-// SUMMARY
-// ======================================
-
-$totalUsers = countRows("
-    SELECT id
-    FROM users
-");
-
-$totalAdmins = countRows("
-    SELECT id
-    FROM users
-    WHERE role='admin'
-");
-
-$totalDepartments = countRows("
-    SELECT id
-    FROM departments
-");
-
-$usersWithPermissions = countRows("
-    SELECT DISTINCT user_id
-    FROM permissions
-");
+$userRole = strtolower(
+    trim(
+        (string)($user['role'] ?? 'user')
+    )
+);
+$canShare = Permission::canShare();
 
 
-// ======================================
-// DOCUMENTS
-// ======================================
+/*
+ * ==========================================================
+ * ROLE CHECK
+ * ==========================================================
+ */
 
-$documents = fetchAll("
+$isAdmin = in_array(
+    $userRole,
+    [
+        'admin',
+        'administrator'
+    ],
+    true
+);
 
-SELECT
-
-id,
-title
-
-FROM documents
-
-ORDER BY title
-
-");
+$isManager = (
+    $userRole === 'manager'
+    || str_contains($userRole, 'manager')
+);
 
 
-// ======================================
-// DEPARTMENTS
-// ======================================
+if (!$isAdmin && !$isManager) {
 
-$departments = fetchAll("
+    die("Access Denied.");
 
-SELECT
+}
 
-id,
-name
 
-FROM departments
+/*
+ * ==========================================================
+ * GET CURRENT USER DEPARTMENT
+ * ==========================================================
+ */
 
-ORDER BY name
+$departmentId = (int)(
+    $user['department_id'] ?? 0
+);
 
-");
 
+if ($departmentId <= 0) {
+
+    $departmentRow = fetchRow(
+
+        "SELECT department_id
+         FROM users
+         WHERE id=?
+         LIMIT 1",
+
+        [
+            $userId
+        ]
+
+    );
+
+    $departmentId = (int)(
+        $departmentRow['department_id'] ?? 0
+    );
+
+}
+
+
+/*
+ * ==========================================================
+ * MANAGER MUST HAVE DEPARTMENT
+ * ==========================================================
+ */
+
+if ($isManager && $departmentId <= 0) {
+
+    die("Your account is not assigned to a department.");
+
+}
+
+
+/*
+ * ==========================================================
+ * SUMMARY
+ * ==========================================================
+ */
+
+if ($isAdmin) {
+
+    $totalUsers = countRows("
+
+        SELECT id
+        FROM users
+        WHERE status='active'
+
+    ");
+
+
+    $totalAdmins = countRows("
+
+        SELECT id
+        FROM users
+        WHERE role IN ('admin', 'administrator')
+
+    ");
+
+
+    $totalDepartments = countRows("
+
+        SELECT id
+        FROM departments
+
+    ");
+
+
+    $usersWithPermissions = countRows("
+
+        SELECT DISTINCT user_id
+        FROM permissions
+
+    ");
+
+} else {
+
+    /*
+     * ------------------------------------------------------
+     * MANAGER SUMMARY
+     * ------------------------------------------------------
+     */
+
+    $totalUsers = countRows("
+
+        SELECT id
+        FROM users
+        WHERE department_id=?
+        AND status='active'
+
+    ", [
+
+        $departmentId
+
+    ]);
+
+
+    $totalAdmins = countRows("
+
+        SELECT id
+        FROM users
+        WHERE department_id=?
+        AND role IN ('admin', 'administrator')
+
+    ", [
+
+        $departmentId
+
+    ]);
+
+
+    $usersWithPermissions = countRows("
+
+        SELECT DISTINCT p.user_id
+
+        FROM permissions p
+
+        INNER JOIN users u
+            ON u.id = p.user_id
+
+        WHERE u.department_id=?
+
+    ", [
+
+        $departmentId
+
+    ]);
+
+}
+
+
+/*
+ * ==========================================================
+ * LOAD DOCUMENTS
+ * ==========================================================
+ *
+ * Admin:
+ *     All documents.
+ *
+ * Manager:
+ *     Documents belonging to their department.
+ */
+
+if ($isAdmin) {
+
+    $documents = fetchAll("
+
+        SELECT
+            id,
+            title
+
+        FROM documents
+
+        ORDER BY title
+
+    ");
+
+} else {
+
+    $documents = fetchAll("
+
+        SELECT
+            id,
+            title
+
+        FROM documents
+
+        WHERE department_id=?
+
+        ORDER BY title
+
+    ", [
+
+        $departmentId
+
+    ]);
+
+}
+
+
+/*
+ * ==========================================================
+ * LOAD USERS FOR DOCUMENT SHARING
+ * ==========================================================
+ *
+ * Admin:
+ *     Can share with any active user.
+ *
+ * Manager:
+ *     Can share with active users in their department.
+ */
+
+if ($isAdmin) {
+
+    $shareUsers = fetchAll("
+
+        SELECT
+
+            id,
+
+            first_name,
+
+            last_name,
+
+            email,
+
+            department_id
+
+        FROM users
+
+        WHERE status='active'
+
+        ORDER BY first_name, last_name
+
+    ");
+
+} else {
+
+    $shareUsers = fetchAll("
+
+        SELECT
+
+            id,
+
+            first_name,
+
+            last_name,
+
+            email,
+
+            department_id
+
+        FROM users
+
+        WHERE status='active'
+
+        AND department_id=?
+
+        ORDER BY first_name, last_name
+
+    ", [
+
+        $departmentId
+
+    ]);
+
+}
+
+
+/*
+ * ==========================================================
+ * LOAD DEPARTMENTS
+ * ==========================================================
+ *
+ * Kept for the page scope/display.
+ */
+
+if ($isAdmin) {
+
+    $departments = fetchAll("
+
+        SELECT
+            id,
+            name
+
+        FROM departments
+
+        ORDER BY name
+
+    ");
+
+} else {
+
+    $departments = fetchAll("
+
+        SELECT
+            id,
+            name
+
+        FROM departments
+
+        WHERE id=?
+
+        ORDER BY name
+
+    ", [
+
+        $departmentId
+
+    ]);
+
+}
+
+
+/*
+ * ==========================================================
+ * MANAGER DEPARTMENT NAME
+ * ==========================================================
+ */
+
+$managerDepartment = null;
+
+if ($isManager) {
+
+    $managerDepartment = fetchRow(
+
+        "SELECT name
+         FROM departments
+         WHERE id=?
+         LIMIT 1",
+
+        [
+            $departmentId
+        ]
+
+    );
+
+}
+
+
+/*
+ * ==========================================================
+ * PAGE
+ * ==========================================================
+ */
 
 include "includes/header.php";
 include "includes/sidebar.php";
@@ -83,14 +392,31 @@ include "includes/navbar.php";
 
 <link rel="stylesheet" href="assets/css/permissions.css">
 
+
+<!-- ==========================================================
+     PAGE HEADER
+========================================================== -->
+
 <div class="page-header">
 
     <div>
 
-        <h1>Permissions Management</h1>
+        <h1>
+            Permissions Management
+        </h1>
 
         <p>
-            Control who can view, edit, approve, delete and share documents.
+
+            <?php if ($isAdmin) { ?>
+
+                Control document permissions across the organization.
+
+            <?php } else { ?>
+
+                Manage document permissions for members of your department.
+
+            <?php } ?>
+
         </p>
 
     </div>
@@ -98,12 +424,14 @@ include "includes/navbar.php";
 </div>
 
 
-
-<!-- ===================== -->
-<!-- SUMMARY -->
-<!-- ===================== -->
+<!-- ==========================================================
+     SUMMARY
+========================================================== -->
 
 <div class="permission-cards">
+
+
+    <!-- TOTAL USERS -->
 
     <div class="permission-card blue">
 
@@ -111,14 +439,26 @@ include "includes/navbar.php";
 
         <div>
 
-            <h2><?= $totalUsers ?></h2>
+            <h2>
+                <?= (int)$totalUsers ?>
+            </h2>
 
-            <p>Total Users</p>
+            <p>
+
+                <?= $isAdmin
+                    ? 'Total Users'
+                    : 'Department Users'
+                ?>
+
+            </p>
 
         </div>
 
     </div>
 
+
+
+    <!-- ADMINISTRATORS -->
 
     <div class="permission-card green">
 
@@ -126,59 +466,127 @@ include "includes/navbar.php";
 
         <div>
 
-            <h2><?= $totalAdmins ?></h2>
+            <h2>
+                <?= (int)$totalAdmins ?>
+            </h2>
 
-            <p>Administrators</p>
+            <p>
+
+                <?= $isAdmin
+                    ? 'Administrators'
+                    : 'Department Administrators'
+                ?>
+
+            </p>
 
         </div>
 
     </div>
 
 
-    <div class="permission-card purple">
+
+    <!-- USERS WITH PERMISSIONS -->
+
+    <div class="permission-card permission-purple">
 
         <i class="fa fa-user-check"></i>
 
         <div>
 
-            <h2><?= $usersWithPermissions ?></h2>
+            <h2>
+                <?= (int)$usersWithPermissions ?>
+            </h2>
 
-            <p>Users With Permissions</p>
+            <p>
 
-        </div>
+                <?= $isAdmin
+                    ? 'Users With Permissions'
+                    : 'Department Users With Permissions'
+                ?>
 
-    </div>
-
-
-    <div class="permission-card orange">
-
-        <i class="fa fa-building"></i>
-
-        <div>
-
-            <h2><?= $totalDepartments ?></h2>
-
-            <p>Departments</p>
+            </p>
 
         </div>
 
     </div>
+
+
+
+    <!-- DEPARTMENTS -->
+
+    <?php if ($isAdmin) { ?>
+
+        <div class="permission-card orange">
+
+            <i class="fa fa-building"></i>
+
+            <div>
+
+                <h2>
+                    <?= (int)$totalDepartments ?>
+                </h2>
+
+                <p>
+                    Departments
+                </p>
+
+            </div>
+
+        </div>
+
+    <?php } ?>
+
 
 </div>
 
 
 
-<!-- ===================== -->
-<!-- PERMISSIONS TABLE -->
-<!-- ===================== -->
+<!-- ==========================================================
+     USER PERMISSIONS
+========================================================== -->
 
 <div class="permission-container">
 
     <div class="table-header">
 
-        <h3>User Access Permissions</h3>
+        <div>
+
+            <h3>
+
+                <?= $isAdmin
+                    ? 'User Access Permissions'
+                    : 'Department Member Permissions'
+                ?>
+
+            </h3>
+
+
+            <?php if ($isManager) { ?>
+
+                <p class="permission-scope">
+
+                    <i class="fa fa-building"></i>
+
+                    Managing permissions for:
+
+                    <strong>
+
+                        <?= htmlspecialchars(
+                            $managerDepartment['name']
+                            ?? 'Your Department'
+                        ) ?>
+
+                    </strong>
+
+                </p>
+
+            <?php } ?>
+
+        </div>
+
 
         <button
+            type="button"
             class="add-user-btn"
             onclick="loadPermissions()">
 
@@ -190,31 +598,49 @@ include "includes/navbar.php";
 
     </div>
 
+
     <table>
 
         <thead>
 
             <tr>
 
-                <th>User</th>
+                <th>
+                    User
+                </th>
 
-                <th>Department</th>
+                <th>
+                    Department
+                </th>
 
-                <th>View</th>
+                <th>
+                    View
+                </th>
 
-                <th>Edit</th>
+                <th>
+                    Edit
+                </th>
 
-                <th>Approve</th>
+                <th>
+                    Approve
+                </th>
 
-                <th>Delete</th>
+                <th>
+                    Delete
+                </th>
 
-                <th>Share</th>
+                <th>
+                    Share
+                </th>
 
-                <th>Actions</th>
+                <th>
+                    Actions
+                </th>
 
             </tr>
 
         </thead>
+
 
         <tbody id="permissionsTable">
 
@@ -225,32 +651,49 @@ include "includes/navbar.php";
 </div>
 
 
+<!-- ==========================================================
+     DOCUMENT SHARING
+========================================================== -->
 
-<!-- ===================== -->
-<!-- DOCUMENT SHARING -->
-<!-- ===================== -->
+<?php if ($canShare) { ?>
 
 <div class="share-container">
 
-    <h3>Share Document Permissions</h3>
+    <h3>
+        Share Document Permissions
+    </h3>
+
 
     <div class="share-box">
 
-        <label>
+
+        <!-- DOCUMENT -->
+
+        <label for="documentSelect">
 
             Select Document
 
         </label>
 
+
         <select id="documentSelect">
 
-            <option value="">Select Document</option>
+            <option value="">
 
-            <?php foreach($documents as $doc){ ?>
+                Select Document
 
-                <option value="<?= $doc['id'] ?>">
+            </option>
 
-                    <?= htmlspecialchars($doc['title']) ?>
+
+            <?php foreach ($documents as $doc) { ?>
+
+                <option
+                    value="<?= (int)$doc['id'] ?>"
+                >
+
+                    <?= htmlspecialchars(
+                        $doc['title']
+                    ) ?>
 
                 </option>
 
@@ -260,21 +703,50 @@ include "includes/navbar.php";
 
 
 
-        <label>
+        <!-- USER -->
+
+        <label for="userSelect">
 
             Allow Access To
 
         </label>
 
+
         <select
-            id="departmentSelect"
-            multiple>
+            id="userSelect"
+            multiple
+        >
 
-            <?php foreach($departments as $department){ ?>
+            <?php foreach ($shareUsers as $shareUser) { ?>
 
-                <option value="<?= $department['id'] ?>">
+                <?php
 
-                    <?= htmlspecialchars($department['name']) ?>
+                $shareUserName = trim(
+
+                    ($shareUser['first_name'] ?? '')
+                    . ' '
+                    .
+                    ($shareUser['last_name'] ?? '')
+
+                );
+
+                ?>
+
+                <option
+                    value="<?= (int)$shareUser['id'] ?>"
+                >
+
+                    <?= htmlspecialchars(
+                        $shareUserName
+                    ) ?>
+
+                    <?php if (!empty($shareUser['email'])) { ?>
+
+                        (<?= htmlspecialchars(
+                            $shareUser['email']
+                        ) ?>)
+
+                    <?php } ?>
 
                 </option>
 
@@ -283,46 +755,66 @@ include "includes/navbar.php";
         </select>
 
 
+        <small>
+
+            Hold CTRL/CMD to select multiple users.
+
+        </small>
+
+
+
+        <!-- SHARE ACCESS PERMISSIONS -->
 
         <div class="permission-options">
+
 
             <label>
 
                 <input
                     type="checkbox"
-                    id="shareView">
+                    id="shareView"
+                >
 
                 Can View
 
             </label>
 
+
             <label>
 
                 <input
                     type="checkbox"
-                    id="shareEdit">
+                    id="shareEdit"
+                >
 
                 Can Edit
 
             </label>
 
+
             <label>
 
                 <input
                     type="checkbox"
-                    id="shareShare">
+                    id="shareShare"
+                >
 
                 Can Share
 
             </label>
 
+
         </div>
 
 
 
+        <!-- SAVE -->
+
         <button
+            type="button"
             class="save-btn"
-            onclick="saveSharing()">
+            onclick="saveSharing()"
+        >
 
             <i class="fa fa-save"></i>
 
@@ -330,10 +822,20 @@ include "includes/navbar.php";
 
         </button>
 
+
     </div>
 
 </div>
 
+<?php } ?>
+
+
+
 <script src="assets/js/permissions.js"></script>
 
-<?php include "includes/footer.php"; ?>
+
+<?php
+
+include "includes/footer.php";
+
+?>
