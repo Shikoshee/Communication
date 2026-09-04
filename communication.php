@@ -343,6 +343,7 @@ m.message,
 m.created_at,
 m.read_at,
 m.document_id,
+m.image_path,
 CONCAT(
 u.first_name,
 
@@ -355,7 +356,8 @@ u.last_name
 
 d.title,
 
-d.file_name
+d.file_name,
+d.file_path
 
 
 FROM messages m
@@ -853,7 +855,28 @@ const CURRENT_CONVERSATION = <?= $conversation['id'] ?? 0 ?>;
 
 <script src="assets/js/communication.js"></script>
 
+<!-- ======================================================
+     FULL IMAGE VIEWER
+====================================================== -->
 
+<div id="imageViewer" class="image-viewer">
+
+    <button
+        type="button"
+        id="imageViewerClose"
+        class="image-viewer-close"
+        title="Close"
+    >
+        ×
+    </button>
+
+    <img
+        id="imageViewerImage"
+        src=""
+        alt="Full size image"
+    >
+
+</div>
 <?php
 
 include "includes/footer.php";
