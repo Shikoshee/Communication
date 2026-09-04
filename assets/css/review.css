@@ -1,0 +1,700 @@
+/* =====================================
+   PAGE HEADER
+===================================== */
+
+.page-header{
+    margin:30px 0;
+}
+
+.page-header h1{
+    font-size:30px;
+    font-weight:700;
+    color:#1e293b;
+    margin-bottom:8px;
+}
+
+.page-header p{
+    color:#64748b;
+    font-size:15px;
+}
+
+
+/* =====================================
+   MAIN REVIEW CARD
+===================================== */
+
+.review-card{
+
+    background:#f8fafc;
+    padding:25px;
+    border-radius:18px;
+
+}
+
+
+
+/* =====================================
+   DOCUMENT HEADER
+===================================== */
+
+
+.review-header{
+
+    background:white;
+    padding:25px;
+
+    border-radius:16px;
+
+    display:flex;
+
+    gap:20px;
+
+    align-items:center;
+
+    box-shadow:
+    0 5px 20px rgba(0,0,0,.06);
+
+    margin-bottom:25px;
+
+}
+
+
+
+.document-icon{
+
+    width:70px;
+    height:70px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    background:#dbeafe;
+
+    color:#0B5ED7;
+
+    border-radius:15px;
+
+    font-size:32px;
+
+}
+
+
+
+.document-details h2{
+
+    margin:0 0 15px;
+
+    color:#1e293b;
+
+    font-size:24px;
+
+}
+
+
+
+.document-meta{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:12px;
+
+}
+
+
+
+.document-meta span{
+
+    background:#f1f5f9;
+
+    padding:8px 14px;
+
+    border-radius:20px;
+
+    font-size:13px;
+
+    color:#475569;
+
+}
+
+
+
+.document-meta i{
+
+    margin-right:6px;
+
+    color:#0B5ED7;
+
+}
+
+
+
+/* =====================================
+   STATUS
+===================================== */
+
+
+.status{
+
+    color:white!important;
+
+    font-weight:600;
+
+}
+
+
+
+.status.pending{
+
+    background:#f59e0b!important;
+
+}
+
+
+.status.approved{
+
+    background:#198754!important;
+
+}
+
+
+.status.rejected{
+
+    background:#dc3545!important;
+
+}
+
+
+
+/* =====================================
+   PREVIEW CARD
+===================================== */
+
+
+.preview-card{
+
+    background:white;
+
+    border-radius:16px;
+
+    padding:20px;
+
+    box-shadow:
+    0 5px 20px rgba(0,0,0,.06);
+
+    margin-bottom:25px;
+
+}
+
+
+
+.preview-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:20px;
+
+}
+
+
+
+.preview-header h3{
+
+    margin:0;
+
+    color:#1e293b;
+
+}
+
+
+
+.download-original{
+
+    background:#0B5ED7;
+
+    color:white;
+
+    padding:10px 16px;
+
+    border-radius:8px;
+
+    text-decoration:none;
+
+    font-size:14px;
+
+}
+
+
+
+.download-original:hover{
+
+    background:#084298;
+
+}
+
+
+
+.document-preview iframe{
+
+    width:100%;
+
+    height:75vh;
+
+    border:none;
+
+    border-radius:12px;
+
+    background:#f1f5f9;
+
+}
+
+
+
+
+/* =====================================
+   SIGNED DOCUMENT
+===================================== */
+
+
+.signed-preview{
+
+    background:#ecfdf5;
+
+    border-left:5px solid #198754;
+
+    padding:20px;
+
+    border-radius:12px;
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:25px;
+
+}
+
+
+
+.signed-preview h4{
+
+    margin:0 0 8px;
+
+    color:#166534;
+
+}
+
+
+
+.signed-preview p{
+
+    margin:0;
+
+    color:#475569;
+
+}
+
+
+
+.signed-download{
+
+    background:#198754;
+
+    color:white;
+
+    padding:12px 18px;
+
+    border-radius:8px;
+
+    text-decoration:none;
+
+}
+
+
+
+/* =====================================
+   UPLOAD SECTION
+===================================== */
+
+
+.upload-section{
+
+    background:white;
+
+    padding:25px;
+
+    border-radius:16px;
+
+    box-shadow:
+    0 5px 20px rgba(0,0,0,.06);
+
+    margin-bottom:25px;
+
+}
+
+
+
+.upload-section h3{
+
+    margin-top:0;
+
+    color:#1e293b;
+
+}
+
+
+
+.upload-section p{
+
+    color:#64748b;
+
+}
+
+
+
+.upload-box{
+
+    border:2px dashed #93c5fd;
+
+    padding:30px;
+
+    border-radius:14px;
+
+    text-align:center;
+
+    background:#f8fbff;
+
+    transition:.3s;
+
+}
+
+
+
+.upload-box:hover{
+
+    border-color:#0B5ED7;
+
+    background:#eff6ff;
+
+}
+
+
+
+.upload-box input{
+
+    width:100%;
+
+}
+
+
+
+.upload-box p{
+
+    margin-top:12px;
+
+    font-size:13px;
+
+}
+
+
+
+/* =====================================
+   UPLOAD BUTTON
+===================================== */
+
+
+.upload-signed-btn{
+
+    margin-top:20px;
+
+    width:100%;
+
+    padding:15px;
+
+    border:none;
+
+    border-radius:10px;
+
+    background:#0B5ED7;
+
+    color:white;
+
+    font-weight:600;
+
+    font-size:15px;
+
+    cursor:pointer;
+
+    transition:.3s;
+
+}
+
+
+
+.upload-signed-btn:hover{
+
+    background:#084298;
+
+}
+
+
+
+/* =====================================
+   APPROVAL SECTION
+===================================== */
+
+
+.action-card{
+
+    background:white;
+
+    padding:25px;
+
+    border-radius:16px;
+
+    box-shadow:
+    0 5px 20px rgba(0,0,0,.06);
+
+}
+
+
+
+.action-card h3{
+
+    margin-top:0;
+
+    color:#1e293b;
+
+}
+
+
+
+.review-actions{
+
+    display:flex;
+
+    gap:15px;
+
+    margin-top:20px;
+
+}
+
+
+
+.approve-btn,
+.reject-btn{
+
+    flex:1;
+
+    padding:15px;
+
+    border:none;
+
+    border-radius:10px;
+
+    color:white;
+
+    font-size:15px;
+
+    font-weight:600;
+
+    cursor:pointer;
+
+    transition:.3s;
+
+}
+
+
+
+.approve-btn{
+
+    background:#198754;
+
+}
+
+
+
+.approve-btn:hover{
+
+    background:#157347;
+
+}
+
+
+
+.reject-btn{
+
+    background:#dc3545;
+
+}
+
+
+
+.reject-btn:hover{
+
+    background:#bb2d3b;
+
+}
+
+
+
+/* =====================================
+   RESPONSIVE
+===================================== */
+
+
+@media(max-width:768px){
+
+
+.review-header{
+
+    flex-direction:column;
+
+    align-items:flex-start;
+
+}
+
+
+.document-meta{
+
+    flex-direction:column;
+
+}
+
+
+.preview-header{
+
+    flex-direction:column;
+
+    gap:15px;
+
+    align-items:flex-start;
+
+}
+
+
+.signed-preview{
+
+    flex-direction:column;
+
+    gap:15px;
+
+    align-items:flex-start;
+
+}
+
+
+.review-actions{
+
+    flex-direction:column;
+
+}
+
+
+.document-preview iframe{
+
+    height:55vh;
+
+}
+
+
+}
+
+.office-open-card {
+    text-align: center;
+    padding: 60px 30px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.office-icon {
+    width: 75px;
+    height: 75px;
+    margin: 0 auto 20px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 12px;
+
+    background: #64748b;
+    color: white;
+
+    font-size: 35px;
+}
+
+.office-icon.word {
+    background: #185abd;
+}
+
+.office-icon.excel {
+    background: #107c41;
+}
+
+.office-open-card h3 {
+    margin-bottom: 10px;
+}
+
+.office-open-card p {
+    color: #64748b;
+    margin-bottom: 25px;
+}
+
+.open-office-btn {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 8px;
+
+    padding: 12px 22px;
+
+    border-radius: 7px;
+
+    color: white;
+
+    text-decoration: none;
+
+    font-weight: 600;
+
+    background: #475569;
+}
+
+.open-office-btn:hover {
+    opacity: .9;
+}
+
+.word-btn {
+    background: #185abd;
+}
+
+.excel-btn {
+    background: #107c41;
+}
+
+.download-document {
+    display: inline-block;
+
+    margin-top: 18px;
+
+    color: #475569;
+
+    text-decoration: none;
+}
+
+.download-document:hover {
+    text-decoration: underline;
+}

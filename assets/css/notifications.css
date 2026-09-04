@@ -1,0 +1,252 @@
+/* =====================================
+   NOTIFICATIONS
+===================================== */
+
+
+/* ===============================
+   DROPDOWN
+=============================== */
+
+.notification-wrapper{
+
+    position:relative;
+
+}
+
+
+#notificationDropdown{
+
+    display:none;
+
+    position:absolute;
+
+    top:45px;
+
+    right:0;
+
+    width:350px;
+
+    background:var(--surface);
+
+    border:1px solid var(--border);
+
+    border-radius:12px;
+
+    box-shadow:var(--shadow);
+
+    overflow:hidden;
+
+    z-index:1000;
+
+}
+
+
+#notificationDropdown.show{
+
+    display:block;
+
+}
+
+
+
+/* ===============================
+   PAGE
+=============================== */
+
+.notifications-page{
+
+    margin-top:20px;
+
+}
+
+
+.notification-toolbar{
+
+    display:flex;
+
+    justify-content:flex-end;
+
+    margin-bottom:20px;
+
+}
+
+
+
+/* ===============================
+   NOTIFICATION CARD
+=============================== */
+
+.notification-card{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:20px;
+
+    padding:20px;
+
+    margin-bottom:15px;
+
+    background:var(--surface);
+
+    color:var(--text);
+
+    border-radius:12px;
+
+    box-shadow:var(--shadow);
+
+    transition:.25s;
+
+    cursor:pointer;
+
+}
+
+
+.notification-card:hover{
+
+    transform:translateY(-2px);
+
+    background:var(--surface-2);
+
+}
+
+
+.notification-card.unread{
+
+    background:rgba(11,94,215,.08);
+
+    border-left:4px solid var(--primary);
+
+}
+
+
+
+/* ===============================
+   CARD CONTENT
+=============================== */
+
+.notification-left{
+
+    font-size:24px;
+
+    color:var(--primary);
+
+    flex-shrink:0;
+
+}
+
+
+.notification-middle{
+
+    flex:1;
+
+}
+
+
+.notification-middle h3{
+
+    margin-bottom:8px;
+
+    color:var(--text);
+
+}
+
+
+.notification-middle p{
+
+    margin-bottom:8px;
+
+    color:var(--text-light);
+
+}
+
+
+.notification-middle small{
+
+    color:var(--text-light);
+
+}
+
+
+
+/* ===============================
+   ACTIONS
+=============================== */
+
+.notification-right{
+
+    display:flex;
+
+    gap:10px;
+
+}
+
+
+.notification-right button{
+
+    border:none;
+
+    background:none;
+
+    color:var(--text-light);
+
+    font-size:18px;
+
+    cursor:pointer;
+
+    transition:.25s;
+
+}
+
+
+.notification-right button:hover{
+
+    color:var(--primary);
+
+}
+
+
+
+/* ===============================
+   EMPTY STATE
+=============================== */
+
+.notification-empty,
+.empty-state{
+
+    text-align:center;
+
+    padding:80px 20px;
+
+    color:var(--text-light);
+
+}
+
+
+.notification-empty i,
+.empty-state i{
+
+    font-size:60px;
+
+    margin-bottom:20px;
+
+    color:var(--text-light);
+
+}
+
+
+
+/* ===============================
+   LIST ITEM
+=============================== */
+
+.notification-item.unread{
+
+    background:rgba(11,94,215,.08);
+
+    border-left:4px solid var(--primary);
+
+    font-weight:600;
+
+}

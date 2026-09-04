@@ -1,277 +1,787 @@
-/* ========================================
-   SIDEBAR STYLING - FIT ALL ITEMS ON SCREEN
-   ======================================== */
+/* ===========================
+   RESET
+=========================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+
+:root {
+
+    --sidebar-width: 250px;
+    --sidebar-collapsed-width: 70px;
+
+    --primary: #667eea;
+    --secondary: #764ba2;
+
+    --surface: #fff;
+    --surface-2: #f5f5f5;
+    --text: #333;
+
+    --shadow: 0 2px 10px rgba(0,0,0,.12);
+
+    --transition: .3s ease;
+}
+
+
+body {
+
+    font-family: "Segoe UI", sans-serif;
+
+    background: #f2f4f8;
+
+    overflow-x: hidden;
+
+    margin: 0;
+}
+
+
+/* ===========================
+   CONTAINER
+=========================== */
+
+.container {
+
+    width: 100%;
+
+    min-height: 100vh;
+
+}
+
+
+/* ===========================
+   SIDEBAR
+=========================== */
 
 .sidebar {
+
     position: fixed;
-    left: 0;
+
     top: 0;
-    width: 250px;
+    left: 0;
+
+    width: var(--sidebar-width);
+
     height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 0;
-    margin: 0;
+
+    /*
+     * THIS WAS THE IMPORTANT MISSING PART.
+     *
+     * Your links are white, so the sidebar itself
+     * must have a dark/colored background.
+     */
+
+    background:
+        linear-gradient(
+            180deg,
+            #667eea 0%,
+            #764ba2 100%
+        );
+
+    color: #fff;
+
     display: flex;
+
     flex-direction: column;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
+
     overflow: hidden;
+
+    transition:
+        width .3s ease,
+        transform .3s ease;
+
+    z-index: 1000;
+
+    box-shadow:
+        4px 0 15px rgba(0,0,0,.12);
 }
 
-/* Logo Section - Compact */
-.sidebar .logo {
-    padding: 15px 20px;
-    text-align: center;
-    color: white;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+
+/* ===========================
+   COLLAPSED SIDEBAR
+=========================== */
+
+.sidebar.collapsed {
+
+    width: var(--sidebar-collapsed-width);
+
+}
+
+
+/* ===========================
+   LOGO
+=========================== */
+/* ===========================
+   LOGO / SIDEBAR HEADER
+=========================== */
+
+.logo {
+
+    width: 100%;
+
+    min-height: 145px;
+
+    height: 145px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    justify-content: flex-start;
+
+    color: #fff;
+
+    border-bottom:
+        1px solid rgba(255,255,255,.15);
+
     flex-shrink: 0;
-    min-height: auto;
+
+    position: relative;
+
+    padding-top: 8px;
+
+
 }
 
-.sidebar .logo i {
-    font-size: 28px;
-    margin-bottom: 5px;
+
+/* ===========================
+   MENU BUTTON
+=========================== */
+
+#menuBtn {
+
+    width: 42px;
+
+    height: 42px;
+
+    min-width: 42px;
+
+    min-height: 42px;
+
+    padding: 0;
+
+    margin: 0 0 4px 0;
+
+    border: none;
+
+    outline: none;
+
+    background: transparent;
+
+    cursor: pointer;
+
+    color: #fff;
+
+    border-radius: 8px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 22px;
+
+    flex-shrink: 0;
+
+    transition:
+        background .3s ease,
+        transform .3s ease;
+
+}
+
+
+#menuBtn:hover {
+
+    background:
+        rgba(255,255,255,.18);
+
+}
+
+
+#menuBtn i {
+
     display: block;
+
+    transition:
+        transform .3s ease;
+
 }
 
-.sidebar .logo h2 {
+
+#menuBtn.active i {
+
+    transform: rotate(90deg);
+
+}
+
+
+/* ===========================
+   COMMUNICATION ICON
+=========================== */
+
+.logo-icon {
+
+    display: block;
+
+    font-size: 30px;
+
+    line-height: 1;
+
+    margin: 2px 0 6px 0;
+
+    color: #fff;
+
+    flex-shrink: 0;
+
+}
+
+
+/* ===========================
+   COMMUNICATION TEXT
+=========================== */
+
+.logo h2 {
+
+    display: block;
+
+    margin: 0;
+
+    padding: 0;
+
     font-size: 16px;
-    margin: 0;
+
+    line-height: 1.2;
+
     font-weight: 600;
-    letter-spacing: 0.5px;
+
+    color: #fff;
+
+    text-align: center;
+
+    white-space: nowrap;
+
+    overflow: hidden;
+
+    opacity: 1;
+
+    width: auto;
+
+    transition:
+        opacity .3s ease,
+        width .3s ease;
+
 }
 
-/* Navigation List - Scrollable */
+
+/* ===========================
+   COLLAPSED SIDEBAR
+=========================== */
+
+.sidebar.collapsed .logo {
+
+    min-height: 100px;
+
+    height: 100px;
+
+    padding-top: 8px;
+
+}
+
+
+/*
+ * When collapsed:
+ *
+ * ☰
+ * 💬
+ *
+ * Hide "Communication"
+ */
+
+.sidebar.collapsed .logo h2 {
+
+    width: 0;
+
+    height: 0;
+
+    opacity: 0;
+
+    margin: 0;
+
+    overflow: hidden;
+
+}
+
+
+/* Keep menu and icon centered */
+
+.sidebar.collapsed .logo-icon {
+
+    margin-top: 2px;
+
+}
+
+
+/* ===========================
+   SIDEBAR NAVIGATION
+=========================== */
+
 .sidebar ul {
+
     list-style: none;
-    padding: 0;
+
     margin: 0;
+
+    padding: 10px 0;
+
     flex: 1;
+
     overflow-y: auto;
+
     overflow-x: hidden;
+
 }
 
-/* Navigation Items */
+
+/* List item */
+
 .sidebar li {
-    margin: 0;
-    padding: 0;
+
+    width: 100%;
+
 }
+
+
+/* Links */
 
 .sidebar a {
+
     display: flex;
+
     align-items: center;
-    gap: 12px;
-    padding: 12px 20px;
-    color: white;
+
+    gap: 15px;
+
+    width: 100%;
+
+    padding: 15px 20px;
+
+    color: #fff;
+
     text-decoration: none;
-    transition: all 0.3s ease;
-    font-size: 14px;
-    font-weight: 500;
-    border-left: 3px solid transparent;
+
+    white-space: nowrap;
+
+    transition:
+        background .2s ease,
+        color .2s ease,
+        padding .3s ease;
+
+    border-left:
+        4px solid transparent;
+
 }
+
+
+/* Icons */
 
 .sidebar a i {
-    font-size: 16px;
-    width: 20px;
+
+    width: 24px;
+
+    min-width: 24px;
+
     text-align: center;
+
+    font-size: 18px;
+
     flex-shrink: 0;
+
+    color: #fff;
+
 }
 
-/* Hover & Active States */
+
+/* Text */
+
+.sidebar a span {
+
+    display: block;
+
+    overflow: hidden;
+
+    white-space: nowrap;
+
+    opacity: 1;
+
+    width: auto;
+
+    transition:
+        opacity .2s ease,
+        width .3s ease;
+
+}
+
+
+/* ===========================
+   HOVER
+=========================== */
+
 .sidebar a:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-left-color: #ffd700;
-    padding-left: 18px;
+
+    background:
+        rgba(255,255,255,.18);
+
+    color: #fff;
+
 }
 
-.sidebar a:active,
+
+/* ===========================
+   ACTIVE LINK
+=========================== */
+
 .sidebar a.active {
-    background: rgba(255, 255, 255, 0.25);
-    border-left-color: #ffd700;
+
+    background:
+        rgba(255,255,255,.25);
+
+    border-left:
+        4px solid gold;
+
 }
 
-/* Scrollbar Styling */
-.sidebar ul::-webkit-scrollbar {
-    width: 6px;
+
+/* ===========================
+   COLLAPSED NAVIGATION
+=========================== */
+
+.sidebar.collapsed a {
+
+    justify-content: center;
+
+    padding-left: 0;
+
+    padding-right: 0;
+
+    gap: 0;
+
 }
+
+
+.sidebar.collapsed a span {
+
+    width: 0;
+
+    opacity: 0;
+
+}
+
+
+/* Keep icons visible */
+
+.sidebar.collapsed a i {
+
+    color: #fff;
+
+}
+
+
+/* ===========================
+   SIDEBAR SCROLLBAR
+=========================== */
+
+.sidebar ul::-webkit-scrollbar {
+
+    width: 5px;
+
+}
+
 
 .sidebar ul::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+
+    background:
+        rgba(255,255,255,.05);
+
 }
+
 
 .sidebar ul::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 3px;
+
+    background:
+        rgba(255,255,255,.35);
+
+    border-radius: 20px;
+
 }
+
 
 .sidebar ul::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.5);
+
+    background:
+        rgba(255,255,255,.55);
+
 }
 
-/* Firefox Scrollbar */
-.sidebar ul {
-    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
-    scrollbar-width: thin;
-}
 
-/* Main Content Adjustment */
-.main,
-.container {
-    margin-left: 250px;
-    width: calc(100% - 250px);
-}
+/* ===========================
+   MAIN
+=========================== */
 
-/* ========================================
-   RESPONSIVE DESIGN
-   ======================================== */
+.main {
 
-/* Tablet - Collapse Sidebar */
-@media (max-width: 1024px) {
-    .sidebar {
-        width: 200px;
-    }
-
-    .sidebar .logo h2 {
-        font-size: 14px;
-    }
-
-    .sidebar a {
-        padding: 10px 15px;
-        font-size: 13px;
-        gap: 10px;
-    }
-
-    .main,
-    .container {
-        margin-left: 200px;
-        width: calc(100% - 200px);
-    }
-}
-
-/* Mobile - Toggle Sidebar */
-@media (max-width: 768px) {
-    .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-        flex-direction: row;
-        max-height: 60px;
-        overflow: hidden;
-    }
-
-    .sidebar .logo {
-        padding: 10px 15px;
-        border-bottom: none;
-        border-right: 1px solid rgba(255, 255, 255, 0.2);
-        min-width: 150px;
-    }
-
-    .sidebar .logo h2 {
-        display: none;
-    }
-
-    .sidebar .logo i {
-        font-size: 24px;
-        margin-bottom: 0;
-    }
-
-    .sidebar ul {
-        display: flex;
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
-        flex: 1;
-    }
-
-    .sidebar li {
-        flex-shrink: 0;
-    }
-
-    .sidebar a {
-        flex-direction: column;
-        justify-content: center;
-        padding: 10px 12px;
-        min-width: 60px;
-        text-align: center;
-        font-size: 11px;
-    }
-
-    .sidebar a i {
-        width: auto;
-        font-size: 18px;
-    }
-
-    .main,
-    .container {
-        margin-left: 0;
-        width: 100%;
-        margin-top: 60px;
-    }
-}
-
-/* Small Mobile */
-@media (max-width: 480px) {
-    .sidebar {
-        max-height: 50px;
-    }
-
-    .sidebar .logo {
-        min-width: 120px;
-        padding: 8px 10px;
-    }
-
-    .sidebar a {
-        padding: 8px 10px;
-        min-width: 50px;
-        font-size: 10px;
-    }
-
-    .sidebar a i {
-        font-size: 16px;
-    }
-
-    .main,
-    .container {
-        margin-top: 50px;
-    }
-}
-
-/* ========================================
-   SMOOTH TRANSITIONS & ANIMATIONS
-   ======================================== */
-
-.sidebar a {
     position: relative;
+
+    margin-left: var(--sidebar-width);
+
+    width: calc(
+        100% - var(--sidebar-width)
+    );
+
+    min-height: 100vh;
+
+    transition:
+        margin-left .3s ease,
+        width .3s ease;
+
 }
 
-.sidebar a::before {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 0;
-    height: 2px;
-    background: #ffd700;
-    transition: width 0.3s ease;
+
+/* Collapsed */
+
+.main.sidebar-collapsed {
+
+    margin-left:
+        var(--sidebar-collapsed-width);
+
+    width: calc(
+        100% - var(--sidebar-collapsed-width)
+    );
+
 }
 
-.sidebar a:hover::before {
-    width: 100%;
+
+/* ===========================
+   TOPBAR
+=========================== */
+
+.topbar {
+
+    height: 70px;
+
+    background: #fff;
+
+    display: flex;
+
+    align-items: center;
+
+    padding: 0 25px;
+
+    box-shadow: var(--shadow);
+
+    gap: 20px;
+
+    flex-shrink: 0;
+
 }
 
-/* ========================================
-   ACCESSIBILITY
-   ======================================== */
 
-.sidebar a:focus {
-    outline: 2px solid #ffd700;
-    outline-offset: -2px;
+/* ===========================
+   SEARCH
+=========================== */
+
+.search {
+
+    flex: 1;
+
+    max-width: 420px;
+
+    display: flex;
+
+    align-items: center;
+
+    background: var(--surface-2);
+
+    border-radius: 8px;
+
+    padding: 10px 15px;
+
+    gap: 10px;
+
 }
 
-/* Prevent text selection on hover */
-.sidebar a {
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
+
+.search input {
+
+    flex: 1;
+
+    border: none;
+
+    background: none;
+
+    outline: none;
+
+}
+
+
+/* ===========================
+   TOP ICONS
+=========================== */
+
+.top-icons {
+
+    margin-left: auto;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 20px;
+
+}
+
+
+/* ===========================
+   PROFILE
+=========================== */
+
+.profile {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 12px;
+
+    padding: 8px 12px;
+
+    border-radius: 10px;
+
+    transition: .3s;
+
+}
+
+
+.profile:hover {
+
+    background: var(--surface-2);
+
+}
+
+
+.profile-avatar {
+
+    width: 42px;
+
+    height: 42px;
+
+    border-radius: 50%;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary),
+            var(--secondary)
+        );
+
+    color: #fff;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    font-weight: bold;
+
+}
+
+
+/* ===========================
+   CONTENT
+=========================== */
+
+.content {
+
+    flex: 1;
+
+    overflow: auto;
+
+    padding: 30px;
+
+    background: #f2f4f8;
+
+}
+
+
+/* ===========================
+   MOBILE
+=========================== */
+
+@media (max-width: 768px) {
+
+    .sidebar {
+
+        width: 250px;
+
+        transform: translateX(-100%);
+
+    }
+
+
+    .sidebar.show {
+
+        transform: translateX(0);
+
+    }
+
+
+    /*
+     * Do NOT allow collapsed width
+     * to override mobile width.
+     */
+
+    .sidebar.collapsed {
+
+        width: 250px;
+
+    }
+
+
+    .main {
+
+        margin-left: 0;
+
+        width: 100%;
+
+    }
+
+
+    .main.sidebar-collapsed {
+
+        margin-left: 0;
+
+        width: 100%;
+
+    }
+
+
+    .search {
+
+        display: none;
+
+    }
+
+
+    .profile span {
+
+        display: none;
+
+    }
+
 }
