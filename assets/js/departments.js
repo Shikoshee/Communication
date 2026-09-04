@@ -1,199 +1,526 @@
 console.log("Departments JS loaded - NEW VERSION");
+
 function addDepartment(){
 
-Swal.fire({
+    let headOptions = `
+        <option value="">
+            Select Department Head
+        </option>
+    `;
 
-title:"Add Department",
+    if(Array.isArray(departmentHeads)){
 
-html:`
+        departmentHeads.forEach(head => {
 
-<input
-id="departmentName"
-class="swal2-input"
-placeholder="Department Name">
+            const fullName =
+                `${head.first_name || ""} ${head.last_name || ""}`.trim();
 
-<textarea
-id="departmentDescription"
-class="swal2-textarea"
-placeholder="Description"></textarea>
+            const role =
+                head.role === "administrator"
+                    ? "Admin"
+                    : (
+                        head.role
+                            ? head.role.charAt(0).toUpperCase() +
+                              head.role.slice(1)
+                            : ""
+                    );
 
-<select
-id="departmentStatus"
-class="swal2-select">
+            headOptions += `
+                <option value="${head.id}">
+                    ${fullName} (${role})
+                </option>
+            `;
 
-<option value="Active">
+        });
 
-Active
+    }
 
-</option>
 
-<option value="Inactive">
+    Swal.fire({
 
-Inactive
+        title:"Add Department",
 
-</option>
+        html:`
 
-</select>
+            <input
+                id="departmentName"
+                class="swal2-input"
+                placeholder="Department Name">
 
-`,
+            <textarea
+                id="departmentDescription"
+                class="swal2-textarea"
+                placeholder="Description"></textarea>
 
-focusConfirm:false,
+            <select
+                id="departmentHead"
+                class="swal2-select">
 
-showCancelButton:true,
+                ${headOptions}
 
-confirmButtonText:"Save",
+            </select>
 
-preConfirm:()=>{
+            <select
+                id="departmentStatus"
+                class="swal2-select">
 
-return{
+                <option value="active">
+                    Active
+                </option>
 
-name:document.getElementById("departmentName").value,
+                <option value="inactive">
+                    Inactive
+                </option>
 
-description:document.getElementById("departmentDescription").value,
+            </select>
 
-status:document.getElementById("departmentStatus").value
+        `,
 
-};
+        focusConfirm:false,
 
-}
+        showCancelButton:true,
 
-}).then((result)=>{
+        confirmButtonText:"Save",
 
-if(result.isConfirmed){
+        preConfirm:()=>{
 
-saveDepartment(result.value);
+            const name =
+                document
+                    .getElementById("departmentName")
+                    .value
+                    .trim();
 
-}
+            const description =
+                document
+                    .getElementById("departmentDescription")
+                    .value
+                    .trim();
 
-});
+            const head_id =
+                document
+                    .getElementById("departmentHead")
+                    .value;
+
+            const status =
+                document
+                    .getElementById("departmentStatus")
+                    .value;
+
+
+            if(!name){
+
+                Swal.showValidationMessage(
+                    "Department name is required."
+                );
+
+                return false;
+
+            }
+
+
+            return {
+
+                name:name,
+
+                description:description,
+
+                head_id:head_id,
+
+                status:status
+
+            };
+
+        }
+
+    }).then(result=>{
+
+        if(result.isConfirmed){
+
+            saveDepartment(result.value);
+
+        }
+
+    });
 
 }
 
 function editDepartment(id){
 
-fetch("api/departments/get.php?id="+id)
+    fetch("api/departments/get.php?id=" + encodeURIComponent(id))
 
-.then(response=>response.json())
+    .then(response => {
 
-.then(result=>{
+        if(!response.ok){
+            throw new Error("HTTP " + response.status);
+        }
 
-if(!result.success){
+        return response.json();
 
-Swal.fire("Error",result.message,"error");
+    })
 
-return;
+    .then(result => {
 
-}
+        console.log("Department API response:", result);
 
-const d=result.department;
+        if(!result.success){
 
-Swal.fire({
+            Swal.fire(
+                "Error",
+                result.message || "Unable to load department.",
+                "error"
+            );
 
-title:"Edit Department",
+            return;
+        }
 
-html:`
 
-<input id="deptName"
+        const d = result.department;
 
-class="swal2-input"
 
-placeholder="Department Name"
+        console.log("Department being edited:", d);
 
-value="${d.name}">
 
-<textarea
+        /*
+         * ==========================================
+         * BUILD DEPARTMENT HEAD OPTIONS
+         * ==========================================
+         */
 
-id="deptDescription"
+        let headOptions = `
+            <option value="">
+                No Department Head
+            </option>
+        `;
 
-class="swal2-textarea"
 
-placeholder="Description">${d.description ?? ''}</textarea>
+        if(
+            typeof departmentHeads !== "undefined" &&
+            Array.isArray(departmentHeads)
+        ){
 
-<select
+            departmentHeads.forEach(head => {
 
-id="deptStatus"
+                const fullName =
+                    `${head.first_name || ""} ${head.last_name || ""}`
+                    .trim();
 
-class="swal2-select">
 
-<option value="active">Active</option>
+                let role = head.role || "";
 
-<option value="inactive">Inactive</option>
+                if(role === "administrator"){
+                    role = "Admin";
+                }else{
+                    role =
+                        role.charAt(0).toUpperCase() +
+                        role.slice(1);
+                }
 
-</select>
 
-`,
+                headOptions += `
+                    <option value="${Number(head.id)}">
+                        ${fullName} (${role})
+                    </option>
+                `;
 
-didOpen:()=>{
+            });
 
-document.getElementById("deptStatus").value=d.status;
+        }
 
-},
 
-showCancelButton:true,
+        /*
+         * ==========================================
+         * OPEN EDIT MODAL
+         * ==========================================
+         */
 
-confirmButtonText:"Save Changes",
+        Swal.fire({
 
-preConfirm:()=>{
+            title: "Edit Department",
 
-return{
+            width: 600,
 
-id:id,
+            html: `
 
-name:document.getElementById("deptName").value,
+                <input
+                    id="deptName"
+                    class="swal2-input"
+                    placeholder="Department Name"
+                    value="${escapeHtml(d.name || "")}"
+                >
 
-description:document.getElementById("deptDescription").value,
 
-status:document.getElementById("deptStatus").value
+                <textarea
+                    id="deptDescription"
+                    class="swal2-textarea"
+                    placeholder="Description"
+                >${escapeHtml(d.description || "")}</textarea>
 
-};
 
-}
+                <select
+                    id="deptHead"
+                    class="swal2-select"
+                >
 
-}).then((form)=>{
+                    ${headOptions}
 
-if(!form.isConfirmed) return;
+                </select>
 
-fetch("api/departments/update.php",{
 
-method:"POST",
+                <select
+                    id="deptStatus"
+                    class="swal2-select"
+                >
 
-headers:{
+                    <option value="active">
+                        Active
+                    </option>
 
-"Content-Type":"application/x-www-form-urlencoded"
+                    <option value="inactive">
+                        Inactive
+                    </option>
 
-},
+                </select>
 
-body:new URLSearchParams(form.value)
+            `,
 
-})
+            focusConfirm: false,
 
-.then(r=>r.json())
+            showCancelButton: true,
 
-.then(data=>{
+            confirmButtonText: "Save Changes",
 
-if(data.success){
+            cancelButtonText: "Cancel",
 
-Swal.fire({
 
-icon:"success",
+            didOpen: () => {
 
-title:"Updated",
+                const headSelect =
+                    document.getElementById("deptHead");
 
-text:data.message
 
-}).then(()=>location.reload());
+                const statusSelect =
+                    document.getElementById("deptStatus");
 
-}else{
 
-Swal.fire("Error",data.message,"error");
+                /*
+                 * Set current department head
+                 */
 
-}
+                if(headSelect){
 
-});
+                    headSelect.value =
+                        d.head_id !== null &&
+                        d.head_id !== undefined &&
+                        d.head_id !== ""
+                            ? String(d.head_id)
+                            : "";
 
-});
+                }
 
-});
+
+                /*
+                 * Set current status
+                 */
+
+                if(statusSelect){
+
+                    statusSelect.value =
+                        String(
+                            d.status || "active"
+                        ).toLowerCase();
+
+                }
+
+
+                console.log(
+                    "Selected head:",
+                    headSelect ? headSelect.value : null
+                );
+
+                console.log(
+                    "Selected status:",
+                    statusSelect ? statusSelect.value : null
+                );
+
+            },
+
+
+            preConfirm: () => {
+
+                const name =
+                    document
+                        .getElementById("deptName")
+                        .value
+                        .trim();
+
+
+                const description =
+                    document
+                        .getElementById("deptDescription")
+                        .value
+                        .trim();
+
+
+                const headId =
+                    document
+                        .getElementById("deptHead")
+                        .value;
+
+
+                const status =
+                    document
+                        .getElementById("deptStatus")
+                        .value;
+
+
+                if(!name){
+
+                    Swal.showValidationMessage(
+                        "Department name is required."
+                    );
+
+                    return false;
+
+                }
+
+
+                return {
+
+                    id: id,
+
+                    name: name,
+
+                    description: description,
+
+                    head_id: headId,
+
+                    status: status
+
+                };
+
+            }
+
+        })
+
+        .then(result => {
+
+            if(!result.isConfirmed){
+                return;
+            }
+
+
+            console.log(
+                "Updating department:",
+                result.value
+            );
+
+
+            fetch(
+                "api/departments/update.php",
+                {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/x-www-form-urlencoded"
+                    },
+
+                    body:
+                        new URLSearchParams(
+                            result.value
+                        )
+
+                }
+
+            )
+
+            .then(response => {
+
+                if(!response.ok){
+                    throw new Error(
+                        "HTTP " + response.status
+                    );
+                }
+
+                return response.json();
+
+            })
+
+            .then(data => {
+
+                console.log(
+                    "Update response:",
+                    data
+                );
+
+
+                if(data.success){
+
+                    Swal.fire({
+
+                        icon: "success",
+
+                        title: "Updated",
+
+                        text:
+                            data.message ||
+                            "Department updated successfully."
+
+                    })
+
+                    .then(() => {
+
+                        location.reload();
+
+                    });
+
+                }else{
+
+                    Swal.fire(
+                        "Error",
+                        data.message ||
+                            "Unable to update department.",
+                        "error"
+                    );
+
+                }
+
+            })
+
+            .catch(error => {
+
+                console.error(
+                    "Update department error:",
+                    error
+                );
+
+                Swal.fire(
+                    "Error",
+                    "Unable to update department.",
+                    "error"
+                );
+
+            });
+
+        });
+
+    })
+
+    .catch(error => {
+
+        console.error(
+            "Get department error:",
+            error
+        );
+
+        Swal.fire(
+            "Error",
+            "Unable to load department.",
+            "error"
+        );
+
+    });
 
 }
 
@@ -592,5 +919,58 @@ confirmButtonText:"Close"
 
 });
 
+
+}
+function saveDepartment(data){
+
+    fetch("api/departments/create.php",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/x-www-form-urlencoded"
+        },
+        body:new URLSearchParams(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+
+        if(result.success){
+
+            Swal.fire(
+                "Success",
+                result.message,
+                "success"
+            ).then(()=>{
+                location.reload();
+            });
+
+        }else{
+
+            Swal.fire(
+                "Error",
+                result.message,
+                "error"
+            );
+
+        }
+
+    })
+    .catch(error=>{
+        console.error(error);
+        Swal.fire(
+            "Error",
+            "Failed to contact server.",
+            "error"
+        );
+    });
+
+}
+function escapeHtml(value){
+
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 
 }

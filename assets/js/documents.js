@@ -341,166 +341,128 @@ Swal.fire(
 // ======================================
 
 
-function shareDocument(id){
-     console.log("Share clicked", id);
+async function shareDocument(id){
 
-    alert("Share button works");
+    const response = await fetch("api/documents/users.php");
 
-Swal.fire({
+    const data = await response.json();
 
+    if(!data.success){
 
-title:"Share Document",
+        Swal.fire(
+            "Error",
+            "Unable to load users.",
+            "error"
+        );
 
+        return;
 
-html:`
+    }
 
+    let options = '<option value="">Select user...</option>';
 
-<input
+    data.users.forEach(user=>{
 
-id="shareUser"
+        options += `
+            <option value="${user.id}">
+                ${user.username} (${user.first_name} ${user.last_name})
+            </option>
+        `;
 
-class="swal2-input"
+    });
 
-placeholder="User ID">
+    Swal.fire({
 
+        title:"Share Document",
 
-<select
+        html:`
 
-id="permission"
+        <select
+            id="shareUser"
+            class="swal2-select">
 
-class="swal2-select">
+            ${options}
 
+        </select>
 
-<option value="read">
+        <select
+            id="permission"
+            class="swal2-select">
 
-Read Only
+            <option value="read">Read Only</option>
+            <option value="edit">Can Edit</option>
 
-</option>
+        </select>
 
+        `,
 
-<option value="edit">
+        showCancelButton:true,
 
-Can Edit
+        confirmButtonText:"Share",
 
-</option>
+        preConfirm:()=>{
 
+            return{
 
-</select>
+                user_id:document.getElementById("shareUser").value,
 
+                permission:document.getElementById("permission").value
 
+            };
 
-`,
+        }
 
+    }).then(result=>{
 
-showCancelButton:true,
+        if(!result.isConfirmed) return;
 
+        fetch("api/documents/share.php",{
 
-confirmButtonText:"Share",
+            method:"POST",
 
+            headers:{
+                "Content-Type":"application/x-www-form-urlencoded"
+            },
 
+            body:new URLSearchParams({
 
-preConfirm:()=>{
+                document_id:id,
 
+                user_id:result.value.user_id,
 
-return{
+                permission:result.value.permission
 
+            })
 
-user_id:
-document.getElementById("shareUser").value,
+        })
 
+        .then(r=>r.json())
 
-permission:
-document.getElementById("permission").value
+        .then(data=>{
 
+            if(data.success){
 
-};
+                Swal.fire(
+                    "Shared",
+                    data.message,
+                    "success"
+                );
 
+            }else{
+
+                Swal.fire(
+                    "Error",
+                    data.message,
+                    "error"
+                );
+
+            }
+
+        });
+
+    });
 
 }
-
-
-})
-.then(result=>{
-
-
-if(!result.isConfirmed)
-return;
-
-
-
-fetch(
-"api/documents/share.php",
-{
-
-
-method:"POST",
-
-
-headers:{
-
-
-"Content-Type":
-"application/x-www-form-urlencoded"
-
-
-},
-
-
-body:new URLSearchParams({
-
-document_id:id,
-
-user_id:result.value.user_id,
-
-permission:result.value.permission
-
-})
-
-
-})
-
-
-.then(r=>r.json())
-
-
-.then(data=>{
-
-
-if(data.success){
-
-
-Swal.fire(
-"Shared",
-data.message,
-"success"
-);
-
-
-}else{
-
-
-Swal.fire(
-"Error",
-data.message,
-"error"
-);
-
-
-}
-
-
-});
-
-
-});
-
-
-
-}
-
-
-
-
 
 
 

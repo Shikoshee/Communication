@@ -1,93 +1,210 @@
-function approveDocument(documentName){
+console.log("Approvals JS loaded");
 
 
-Swal.fire({
+function approveDocument(documentId){
 
-title:"Approve Document?",
+    Swal.fire({
 
-text:documentName,
+        title:"Approve Document?",
 
-icon:"question",
+        text:"Are you sure you want to approve this document? This action cannot be undone.",
 
-showCancelButton:true,
+        icon:"question",
 
-confirmButtonColor:"#198754",
+        showCancelButton:true,
 
-confirmButtonText:"Approve"
+        confirmButtonColor:"#198754",
 
+        confirmButtonText:"Approve"
 
-}).then((result)=>{
+    }).then((result)=>{
 
+        if(result.isConfirmed){
 
-if(result.isConfirmed){
+            fetch("api/documents/approve.php",{
 
+                method:"POST",
 
-Swal.fire({
+                headers:{
+                    "Content-Type":"application/x-www-form-urlencoded"
+                },
 
-icon:"success",
+                body:
+                "id="+documentId
 
-title:"Approved",
+            })
 
-text:documentName+" has been approved."
+            .then(response=>response.json())
+
+            .then(data=>{
+
+                if(data.success){
+
+                    Swal.fire({
+
+                        icon:"success",
+
+                        title:"Approved",
+
+                        text:data.message
+
+                    })
+                    .then(()=>{
+
+                        location.reload();
+
+                    });
+
+                }else{
+
+                    Swal.fire({
+
+icon:"error",
+
+title:"Failed",
+
+text:data.message
 
 });
+
+                }
+
+            });
+
+        }
+
+    });
+
+}
+
+
+
+function rejectDocument(id){
+
+    Swal.fire({
+
+        title:"Reject Document?",
+
+        input:"textarea",
+
+        inputLabel:"Reason",
+
+        inputPlaceholder:"Enter rejection reason...",
+
+
+        showCancelButton:true,
+
+        confirmButtonText:"Reject",
+
+        confirmButtonColor:"#dc3545",
+
+        cancelButtonText:"Cancel"
+
+
+    }).then((result)=>{
+
+
+        if(result.isConfirmed){
+
+
+            fetch("api/documents/reject.php",{
+
+                method:"POST",
+
+                headers:{
+                    "Content-Type":"application/x-www-form-urlencoded"
+                },
+
+                body:
+                "id="+id+
+                "&reason="+encodeURIComponent(result.value)
+
+
+            })
+
+            .then(response=>response.json())
+
+            .then(data=>{
+
+
+                console.log(data);
+
+
+                if(data.success){
+
+
+                    Swal.fire({
+
+                        icon:"success",
+
+                        title:"Rejected",
+
+                        text:data.message
+
+                    })
+                    .then(()=>{
+
+                        location.reload();
+
+                    });
+
+
+                }
+                else{
+
+
+                    Swal.fire({
+
+                        icon:"error",
+
+                        title:"Failed",
+
+                        text:data.message
+
+                    });
+
+
+                }
+
+
+            })
+
+            .catch(error=>{
+
+
+                console.error(error);
+
+
+                Swal.fire({
+
+                    icon:"error",
+
+                    title:"Server Error",
+
+                    text:"Could not process rejection."
+
+                });
+
+
+            });
+
+
+        }
+
+
+    });
 
 
 }
 
 
-});
+// MUST BE OUTSIDE THE OTHER FUNCTIONS
 
+function reviewDocument(id){
 
-}
+    console.log("Reviewing document:", id);
 
-
-
-
-function rejectDocument(documentName){
-
-
-Swal.fire({
-
-title:"Reject Document?",
-
-input:"textarea",
-
-inputLabel:"Reason for rejection",
-
-inputPlaceholder:"Enter comments...",
-
-
-showCancelButton:true,
-
-
-confirmButtonColor:"#dc3545",
-
-
-confirmButtonText:"Reject"
-
-
-}).then((result)=>{
-
-
-if(result.isConfirmed){
-
-
-Swal.fire({
-
-icon:"success",
-
-title:"Rejected",
-
-text:documentName+" has been rejected."
-
-});
-
-
-}
-
-
-});
-
+    window.location.href =
+    "review-document.php?id="+id;
 
 }

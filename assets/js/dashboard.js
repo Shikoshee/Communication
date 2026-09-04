@@ -1,178 +1,547 @@
-/* ==========================================
-   COMMUNICATION SYSTEM - DASHBOARD JS
-==========================================*/
-document.addEventListener("DOMContentLoaded", function(){
-/* ==========================================
-   SIDEBAR TOGGLE
-==========================================*/
-const menuBtn = document.getElementById("menuBtn");
-const sidebar = document.querySelector(".sidebar");
-const main = document.querySelector(".main");
-if(menuBtn){
-    menuBtn.addEventListener("click", function(){
-        // Desktop collapse
-        if(window.innerWidth > 768){
-            sidebar.classList.toggle("collapsed");
-            main.classList.toggle("expanded");
-        }
-        // Mobile slide menu
-        else{
-            sidebar.classList.toggle("active");
-        }
-    });
-}
-/* ==========================================
-   ACTIVE MENU HIGHLIGHT
-==========================================*/
-const currentPage = window.location.pathname.split("/").pop();
-const menuLinks = document.querySelectorAll(
-    ".sidebar ul li a"
-);
-menuLinks.forEach(function(link){
-    const linkPage = link
-        .getAttribute("href");
-    if(linkPage === currentPage){
-        link.parentElement.classList.add("active");
-    }
-});
-/* ==========================================
-   CHART JS - DEPARTMENT ACTIVITY
-==========================================*/
-const chartElement = document.getElementById(
-    "departmentChart"
-);
-if(chartElement){
-    const departmentChart = new Chart(
-        chartElement,
-        {
-        type:"bar",
-        data:{
-            labels:[
-                "Finance",
-                "HR",
-                "IT",
-                "Marketing",
-                "Operations"
+document.addEventListener("DOMContentLoaded", function () {
 
-            ],
-            datasets:[{
-                label:"Documents Uploaded",
-                data:[35,55,42,28,60],
-                backgroundColor:[
-                    "#0B5ED7",
-                    "#198754",
-                    "#F59E0B",
-                    "#DC3545",
-                    "#6610f2"
-                ],
-                borderRadius:8
-            }]
-        },
-        options:{
-            responsive:true,
-            plugins:{
-                legend:{
-                    display:true
-                }
-            },
-            scales:{
-                y:{
-                    beginAtZero:true
-                }
-            }
-        }
-    });
-}
-
-/* ==========================================
-   NOTIFICATION EXAMPLE
-==========================================*/
-const notification =
-document.querySelector(".fa-bell");
-if(notification){
-    notification.addEventListener(
-        "click",
-        function(){
-        Swal.fire({
-            title:"Notifications",
-            html:`
-            <p>
-            <b>3</b> new documents require approval.
-            </p>
-            <p>
-            5 files were shared with your department.
-            </p>
-            `,
-            icon:"info",
-            confirmButtonColor:"#0B5ED7"
-        });
-    });
-}
-/* ==========================================
-   SEARCH FUNCTION
-==========================================*/
-const searchInput =
-document.querySelector(".search input");
-if(searchInput){
-    searchInput.addEventListener(
-        "keyup",
-        function(){
-        let searchValue =
-        searchInput.value.toLowerCase();
-        let rows =
-        document.querySelectorAll(
-            "table tbody tr"
-        );
-        rows.forEach(function(row){
-            let text =
-            row.innerText.toLowerCase();
-            if(text.includes(searchValue)){
-                row.style.display="";
-            }
-            else{
-                row.style.display="none";
-            }
-        });
-    });
-}
-/* ==========================================
-   FUTURE AJAX PLACEHOLDER
-   PHP API CONNECTION WILL GO HERE
-==========================================*/
-function loadDashboardData(){
     /*
-    Future PHP example:
-    fetch("api/dashboard.php")
-    .then(response => response.json())
-    .then(data => {
-        console.log(data);
-    });
+    ==========================================================
+    DASHBOARD CHARTS
+    ==========================================================
     */
-    console.log(
-        "Dashboard ready for backend connection"
-    );
-}
-loadDashboardData();
+
+    if (
+        typeof Chart === "undefined" ||
+        typeof window.dashboardChartData === "undefined"
+    ) {
+
+        return;
+
+    }
+
+
+    const chartData =
+        window.dashboardChartData;
+
+
+    /*
+    ==========================================================
+    DOCUMENTS BY DEPARTMENT
+    ==========================================================
+    */
+
+    const departmentCanvas =
+        document.getElementById(
+            "departmentChart"
+        );
+
+
+    if(departmentCanvas){
+
+        const departmentLabels =
+            Array.isArray(
+                chartData.departmentLabels
+            )
+                ? chartData.departmentLabels
+                : [];
+
+
+        const departmentValues =
+            Array.isArray(
+                chartData.departmentValues
+            )
+                ? chartData.departmentValues
+                : [];
+
+
+        new Chart(
+
+            departmentCanvas,
+
+            {
+
+                type: "bar",
+
+
+                data: {
+
+                    labels:
+                        departmentLabels,
+
+
+                    datasets: [
+
+                        {
+
+                            label:
+                                "Documents",
+
+
+                            data:
+                                departmentValues,
+
+
+                            backgroundColor:
+                                "#2563eb",
+
+
+                            borderColor:
+                                "#1d4ed8",
+
+
+                            borderWidth:
+                                1,
+
+
+                            borderRadius:
+                                6
+
+                        }
+
+                    ]
+
+                },
+
+
+                options: {
+
+                    responsive:
+                        true,
+
+
+                    maintainAspectRatio:
+                        false,
+
+
+                    plugins: {
+
+                        legend: {
+
+                            display:
+                                false
+
+                        },
+
+
+                        tooltip: {
+
+                            callbacks: {
+
+                                label:
+                                    function(context){
+
+                                        return (
+                                            " Documents: " +
+                                            context.raw
+                                        );
+
+                                    }
+
+                            }
+
+                        }
+
+                    },
+
+
+                    scales: {
+
+                        y: {
+
+                            beginAtZero:
+                                true,
+
+
+                            ticks: {
+
+                                precision:
+                                    0
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        );
+
+    }
+
+
+    /*
+    ==========================================================
+    DOCUMENT STATUS
+    ==========================================================
+    */
+
+    const statusCanvas =
+        document.getElementById(
+            "statusChart"
+        );
+
+
+    if(statusCanvas){
+
+        const statusLabels =
+            Array.isArray(
+                chartData.statusLabels
+            )
+                ? chartData.statusLabels
+                : [];
+
+
+        const statusValues =
+            Array.isArray(
+                chartData.statusValues
+            )
+                ? chartData.statusValues
+                : [];
+
+
+        /*
+         * Determine colors from actual status names.
+         */
+
+        const statusColors =
+            statusLabels.map(
+                function(status){
+
+                    const value =
+                        String(
+                            status
+                        ).toLowerCase();
+
+
+                    if(
+                        value === "approved"
+                    ){
+
+                        return "#16a34a";
+
+                    }
+
+
+                    if(
+                        value === "pending"
+                    ){
+
+                        return "#f59e0b";
+
+                    }
+
+
+                    if(
+                        value === "rejected"
+                    ){
+
+                        return "#dc2626";
+
+                    }
+
+
+                    return "#64748b";
+
+                }
+            );
+
+
+        /*
+         * If there is no data, use a neutral color.
+         */
+
+        const colors =
+            statusColors.length > 0
+                ? statusColors
+                : ["#cbd5e1"];
+
+
+        const values =
+            statusValues.length > 0
+                ? statusValues
+                : [0];
+
+
+        const labels =
+            statusLabels.length > 0
+                ? statusLabels
+                : ["No data"];
+
+
+        new Chart(
+
+            statusCanvas,
+
+            {
+
+                type:
+                    "doughnut",
+
+
+                data: {
+
+                    labels:
+                        labels,
+
+
+                    datasets: [
+
+                        {
+
+                            label:
+                                "Documents",
+
+
+                            data:
+                                values,
+
+
+                            backgroundColor:
+                                colors,
+
+
+                            borderColor:
+                                "#ffffff",
+
+
+                            borderWidth:
+                                2,
+
+
+                            hoverOffset:
+                                6
+
+                        }
+
+                    ]
+
+                },
+
+
+                options: {
+
+                    responsive:
+                        true,
+
+
+                    maintainAspectRatio:
+                        false,
+
+
+                    cutout:
+                        "65%",
+
+
+                    plugins: {
+
+                        legend: {
+
+                            position:
+                                "bottom"
+
+                        },
+
+
+                        tooltip: {
+
+                            callbacks: {
+
+                                label:
+                                    function(context){
+
+                                        return (
+                                            " " +
+                                            context.label +
+                                            ": " +
+                                            context.raw
+                                        );
+
+                                    }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        );
+
+    }
+
+
+    /*
+    ==========================================================
+    MONTHLY UPLOADS
+    ==========================================================
+    */
+
+    const uploadCanvas =
+        document.getElementById(
+            "uploadChart"
+        );
+
+
+    if(uploadCanvas){
+
+        const uploadLabels =
+            Array.isArray(
+                chartData.uploadLabels
+            )
+                ? chartData.uploadLabels
+                : [];
+
+
+        const uploadValues =
+            Array.isArray(
+                chartData.uploadValues
+            )
+                ? chartData.uploadValues
+                : [];
+
+
+        new Chart(
+
+            uploadCanvas,
+
+            {
+
+                type:
+                    "line",
+
+
+                data: {
+
+                    labels:
+                        uploadLabels,
+
+
+                    datasets: [
+
+                        {
+
+                            label:
+                                "Uploads",
+
+
+                            data:
+                                uploadValues,
+
+
+                            borderColor:
+                                "#7c3aed",
+
+
+                            backgroundColor:
+                                "rgba(124, 58, 237, 0.15)",
+
+
+                            borderWidth:
+                                3,
+
+
+                            pointBackgroundColor:
+                                "#7c3aed",
+
+
+                            pointBorderColor:
+                                "#ffffff",
+
+
+                            pointBorderWidth:
+                                2,
+
+
+                            pointRadius:
+                                4,
+
+
+                            pointHoverRadius:
+                                6,
+
+
+                            tension:
+                                0.4,
+
+
+                            fill:
+                                true
+
+                        }
+
+                    ]
+
+                },
+
+
+                options: {
+
+                    responsive:
+                        true,
+
+
+                    maintainAspectRatio:
+                        false,
+
+
+                    plugins: {
+
+                        legend: {
+
+                            display:
+                                false
+
+                        },
+
+
+                        tooltip: {
+
+                            callbacks: {
+
+                                label:
+                                    function(context){
+
+                                        return (
+                                            " Uploads: " +
+                                            context.raw
+                                        );
+
+                                    }
+
+                            }
+
+                        }
+
+                    },
+
+
+                    scales: {
+
+                        y: {
+
+                            beginAtZero:
+                                true,
+
+
+                            ticks: {
+
+                                precision:
+                                    0
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        );
+
+    }
+
 });
-
-/* ==========================
-   CURRENT DATE
-========================== */
-
-const dateElement = document.getElementById("currentDate");
-
-if(dateElement){
-
-    const today = new Date();
-
-    dateElement.innerHTML =
-        today.toLocaleDateString("en-GB",{
-
-            weekday:"long",
-            day:"numeric",
-            month:"long",
-            year:"numeric"
-
-        });
-
-}
