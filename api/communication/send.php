@@ -326,6 +326,8 @@ if (isset($_FILES["image"])) {
     }
 
 
+    
+
     // ------------------------------------------------------
     // FILE NAME
     // ------------------------------------------------------
@@ -382,6 +384,233 @@ if (isset($_FILES["image"])) {
         $fileName;
 }
 
+// ==========================================================
+// DOCUMENT UPLOAD
+// ==========================================================
+
+$attachmentPath = null;
+$attachmentName = null;
+$uploadedDocumentDestination = null;
+
+if (isset($_FILES["document"])) {
+
+    $file = $_FILES["document"];
+
+    // ------------------------------------------------------
+    // UPLOAD ERROR
+    // ------------------------------------------------------
+
+    $uploadError =
+        (int) ($file["error"] ?? UPLOAD_ERR_NO_FILE);
+
+    if ($uploadError !== UPLOAD_ERR_OK) {
+
+        $errors = [
+
+            UPLOAD_ERR_INI_SIZE =>
+                "The document is larger than the server upload limit.",
+
+            UPLOAD_ERR_FORM_SIZE =>
+                "The document is larger than the allowed form limit.",
+
+            UPLOAD_ERR_PARTIAL =>
+                "The document upload was interrupted.",
+
+            UPLOAD_ERR_NO_FILE =>
+                "No document file was received.",
+
+            UPLOAD_ERR_NO_TMP_DIR =>
+                "The server temporary upload directory is missing.",
+
+            UPLOAD_ERR_CANT_WRITE =>
+                "The server could not write the uploaded document.",
+
+            UPLOAD_ERR_EXTENSION =>
+                "A PHP extension stopped the document upload."
+        ];
+
+        echo json_encode([
+            "success" => false,
+            "message" =>
+                $errors[$uploadError]
+                ??
+                "Document upload failed. Error code: " .
+                $uploadError
+        ]);
+
+        exit;
+    }
+
+    // ------------------------------------------------------
+    // VALID TEMP FILE
+    // ------------------------------------------------------
+
+    if (
+        empty($file["tmp_name"]) ||
+        !is_uploaded_file($file["tmp_name"])
+    ) {
+
+        echo json_encode([
+            "success" => false,
+            "message" =>
+                "PHP did not receive a valid uploaded document."
+        ]);
+
+        exit;
+    }
+
+    // ------------------------------------------------------
+    // SIZE
+    // ------------------------------------------------------
+
+    $maxSize = 20 * 1024 * 1024; // 20 MB
+
+    if ((int) $file["size"] > $maxSize) {
+
+        echo json_encode([
+            "success" => false,
+            "message" =>
+                "Document must not exceed 20 MB."
+        ]);
+
+        exit;
+    }
+
+    // ------------------------------------------------------
+    // EXTENSION
+    // ------------------------------------------------------
+
+    $originalName =
+        basename($file["name"]);
+
+    $extension =
+        strtolower(
+            pathinfo(
+                $originalName,
+                PATHINFO_EXTENSION
+            )
+        );
+
+    $allowedExtensions = [
+        "pdf",
+        "doc",
+        "docx",
+        "xls",
+        "xlsx",
+        "ppt",
+        "pptx",
+        "txt",
+        "csv",
+        "zip"
+    ];
+
+    if (
+        !in_array(
+            $extension,
+            $allowedExtensions,
+            true
+        )
+    ) {
+
+        echo json_encode([
+            "success" => false,
+            "message" =>
+                "Unsupported document type."
+        ]);
+
+        exit;
+    }
+
+    // ------------------------------------------------------
+    // UPLOAD DIRECTORY
+    // ------------------------------------------------------
+
+    $uploadDirectory =
+        dirname(__DIR__, 2) .
+        "/uploads/communication/documents/";
+
+    if (!is_dir($uploadDirectory)) {
+
+        if (
+            !mkdir(
+                $uploadDirectory,
+                0755,
+                true
+            )
+        ) {
+
+            echo json_encode([
+                "success" => false,
+                "message" =>
+                    "Unable to create document upload directory."
+            ]);
+
+            exit;
+        }
+    }
+
+    if (!is_writable($uploadDirectory)) {
+
+        echo json_encode([
+            "success" => false,
+            "message" =>
+                "The document upload directory is not writable."
+        ]);
+
+        exit;
+    }
+
+    // ------------------------------------------------------
+    // SAFE FILE NAME
+    // ------------------------------------------------------
+
+    $fileName =
+        "chat_doc_" .
+        bin2hex(
+            random_bytes(16)
+        ) .
+        "." .
+        $extension;
+
+    $destination =
+        $uploadDirectory .
+        $fileName;
+
+    // ------------------------------------------------------
+    // MOVE DOCUMENT
+    // ------------------------------------------------------
+
+    if (
+        !move_uploaded_file(
+            $file["tmp_name"],
+            $destination
+        )
+    ) {
+
+        echo json_encode([
+            "success" => false,
+            "message" =>
+                "Unable to save document to the server."
+        ]);
+
+        exit;
+    }
+
+    $uploadedDocumentDestination =
+        $destination;
+
+    // ------------------------------------------------------
+    // DATABASE VALUES
+    // ------------------------------------------------------
+
+    $attachmentPath =
+        "uploads/communication/documents/" .
+        $fileName;
+
+    $attachmentName =
+        $originalName;
+}
+
 
 // ==========================================================
 // VALIDATE MESSAGE CONTENT
@@ -390,21 +619,33 @@ if (isset($_FILES["image"])) {
 if (
     $message === "" &&
     empty($documentId) &&
-    empty($imagePath)
+    empty($imagePath) &&
+    empty($attachmentPath)
 ) {
 
     if (
-        $uploadedImageDestination &&
-        file_exists(
-            $uploadedImageDestination
-        )
-    ) {
+    $uploadedImageDestination &&
+    file_exists(
+        $uploadedImageDestination
+    )
+) {
 
-        unlink(
-            $uploadedImageDestination
-        );
-    }
+    unlink(
+        $uploadedImageDestination
+    );
+}
 
+if (
+    $uploadedDocumentDestination &&
+    file_exists(
+        $uploadedDocumentDestination
+    )
+) {
+
+    unlink(
+        $uploadedDocumentDestination
+    );
+}
 
     echo json_encode([
         "success" => false,
@@ -441,16 +682,28 @@ if ($documentId) {
     if (!$document) {
 
         if (
-            $uploadedImageDestination &&
-            file_exists(
-                $uploadedImageDestination
-            )
-        ) {
+    $uploadedImageDestination &&
+    file_exists(
+        $uploadedImageDestination
+    )
+) {
 
-            unlink(
-                $uploadedImageDestination
-            );
-        }
+    unlink(
+        $uploadedImageDestination
+    );
+}
+
+if (
+    $uploadedDocumentDestination &&
+    file_exists(
+        $uploadedDocumentDestination
+    )
+) {
+
+    unlink(
+        $uploadedDocumentDestination
+    );
+}
 
 
         echo json_encode([
@@ -485,7 +738,13 @@ $result = insertData(
             $documentId,
 
         "image_path" =>
-            $imagePath
+            $imagePath,
+
+        "attachment_path" =>
+            $attachmentPath,
+
+        "attachment_name" =>
+            $attachmentName
     ]
 );
 
@@ -496,16 +755,28 @@ if (
 ) {
 
     if (
-        $uploadedImageDestination &&
-        file_exists(
-            $uploadedImageDestination
-        )
-    ) {
+    $uploadedImageDestination &&
+    file_exists(
+        $uploadedImageDestination
+    )
+) {
 
-        unlink(
-            $uploadedImageDestination
-        );
-    }
+    unlink(
+        $uploadedImageDestination
+    );
+}
+
+if (
+    $uploadedDocumentDestination &&
+    file_exists(
+        $uploadedDocumentDestination
+    )
+) {
+
+    unlink(
+        $uploadedDocumentDestination
+    );
+}
 
 
     echo json_encode([
