@@ -103,49 +103,34 @@ document.addEventListener("DOMContentLoaded", function () {
     // ==========================================================
 
     function getFileUrl(path) {
-
-        if (!path) {
-            return "";
-        }
-
-        path = String(path).trim();
-
-        if (!path) {
-            return "";
-        }
-
-        /*
-         * Already a complete URL.
-         */
-
-        if (
-            path.startsWith("http://") ||
-            path.startsWith("https://")
-        ) {
-            return path;
-        }
-
-        /*
-         * Already starts with /
-         */
-
-        if (path.startsWith("/")) {
-            return path;
-        }
-
-        /*
-         * PHP normally stores:
-         *
-         * uploads/communication/images/example.jpg
-         *
-         * The application is:
-         *
-         * /Communication/
-         */
-
-        return "/Communication/" +
-            path.replace(/^\/+/, "");
+    if (!path) {
+        return "";
     }
+
+    path = String(path).trim();
+
+    if (!path) {
+        return "";
+    }
+
+    // Already a complete URL
+    if (
+        path.startsWith("http://") ||
+        path.startsWith("https://")
+    ) {
+        return path;
+    }
+
+    // Already starts with /
+    if (path.startsWith("/")) {
+        return path;
+    }
+
+    // Database stores paths such as:
+    // uploads/communication/documents/example.pdf
+
+    return "/Communication/" + path.replace(/^\/+/, "");
+}
 
 
     // ==========================================================
@@ -517,180 +502,230 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
     // ==========================================================
-    // DOCUMENT ATTACHMENT
-    // ==========================================================
+// DOCUMENT FILE ATTACHMENT
+// ==========================================================
 
-    if (attachButton) {
+const documentInput =
+    document.getElementById("documentInput");
 
-        attachButton.addEventListener(
-            "click",
-            function (event) {
-
-                event.preventDefault();
-
-                console.log(
-                    "Document attachment button clicked"
-                );
-
-                if (!documentModal) {
-                    return;
-                }
-
-                documentModal.style.display =
-                    "flex";
-            }
-        );
-    }
+let selectedDocumentFile = null;
 
 
-    // ==========================================================
-    // CONFIRM DOCUMENT
-    // ==========================================================
+// ==========================================================
+// OPEN FILE EXPLORER
+// ==========================================================
 
-    if (confirmAttach) {
+if (attachButton) {
 
-        confirmAttach.addEventListener(
-            "click",
-            function (event) {
-
-                event.preventDefault();
-
-                if (
-                    !documentSelect ||
-                    !documentSelect.value
-                ) {
-
-                    alert(
-                        "Please select a document."
-                    );
-
-                    return;
-                }
-
-
-                selectedDocument =
-                    documentSelect.value;
-
-
-                console.log(
-                    "Selected document:",
-                    selectedDocument
-                );
-
-
-                if (attachmentName) {
-
-                    const selectedOption =
-                        documentSelect.options[
-                            documentSelect.selectedIndex
-                        ];
-
-                    if (selectedOption) {
-
-                        attachmentName.textContent =
-                            selectedOption.text;
-                    }
-                }
-
-
-                if (attachmentPreview) {
-
-                    attachmentPreview.style.display =
-                        "block";
-                }
-
-
-                if (documentModal) {
-
-                    documentModal.style.display =
-                        "none";
-                }
-            }
-        );
-    }
-
-
-    // ==========================================================
-    // REMOVE DOCUMENT
-    // ==========================================================
-
-    if (removeAttachment) {
-
-        removeAttachment.addEventListener(
-            "click",
-            function (event) {
-
-                event.preventDefault();
-
-                clearSelectedDocument();
-            }
-        );
-    }
-
-
-    function clearSelectedDocument() {
-
-        selectedDocument = null;
-
-
-        if (documentSelect) {
-            documentSelect.value = "";
-        }
-
-
-        if (attachmentName) {
-            attachmentName.textContent = "";
-        }
-
-
-        if (attachmentPreview) {
-            attachmentPreview.style.display =
-                "none";
-        }
-    }
-
-
-    // ==========================================================
-    // CLOSE DOCUMENT MODAL
-    // ==========================================================
-
-    if (closeDocument) {
-
-        closeDocument.addEventListener(
-            "click",
-            function (event) {
-
-                event.preventDefault();
-
-                if (documentModal) {
-
-                    documentModal.style.display =
-                        "none";
-                }
-            }
-        );
-    }
-
-
-    // ==========================================================
-    // CLOSE MODAL WHEN CLICKING OUTSIDE
-    // ==========================================================
-
-    window.addEventListener(
+    attachButton.addEventListener(
         "click",
         function (event) {
 
-            if (
-                documentModal &&
-                event.target === documentModal
-            ) {
+            event.preventDefault();
 
-                documentModal.style.display =
-                    "none";
+            if (!documentInput) {
+
+                console.error(
+                    "documentInput was not found."
+                );
+
+                alert(
+                    "The document upload control was not found."
+                );
+
+                return;
             }
+
+            documentInput.click();
+
         }
     );
 
+}
+
+
+// ==========================================================
+// DOCUMENT FILE SELECTED
+// ==========================================================
+
+if (documentInput) {
+
+    documentInput.addEventListener(
+        "change",
+        function () {
+
+            const file =
+                this.files &&
+                this.files.length
+                    ? this.files[0]
+                    : null;
+
+            if (!file) {
+                return;
+            }
+
+
+            console.log(
+                "Selected document:",
+                file.name,
+                file.type,
+                file.size
+            );
+
+
+            // ------------------------------------------------
+            // ALLOWED FILE TYPES
+            // ------------------------------------------------
+
+            const allowedExtensions = [
+                "pdf",
+                "doc",
+                "docx",
+                "xls",
+                "xlsx",
+                "ppt",
+                "pptx",
+                "txt",
+                "csv",
+                "zip"
+            ];
+
+
+            const extension =
+                file.name
+                    .split(".")
+                    .pop()
+                    .toLowerCase();
+
+
+            if (
+                !allowedExtensions.includes(
+                    extension
+                )
+            ) {
+
+                alert(
+                    "Unsupported file type. Please select a PDF, Word, Excel, PowerPoint, TXT, CSV or ZIP file."
+                );
+
+                this.value = "";
+
+                selectedDocumentFile = null;
+
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // MAXIMUM SIZE
+            // ------------------------------------------------
+
+            if (
+                file.size >
+                20 * 1024 * 1024
+            ) {
+
+                alert(
+                    "Document must not exceed 20 MB."
+                );
+
+                this.value = "";
+
+                selectedDocumentFile = null;
+
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // SAVE FILE
+            // ------------------------------------------------
+
+            selectedDocumentFile = file;
+
+
+            console.log(
+                "selectedDocumentFile:",
+                selectedDocumentFile
+            );
+
+
+            // ------------------------------------------------
+            // SHOW PREVIEW
+            // ------------------------------------------------
+
+            if (attachmentName) {
+
+                attachmentName.textContent =
+                    file.name;
+
+            }
+
+
+            if (attachmentPreview) {
+
+                attachmentPreview.style.display =
+                    "block";
+
+            }
+
+        }
+    );
+
+}
+
+
+// ==========================================================
+// REMOVE DOCUMENT
+// ==========================================================
+
+if (removeAttachment) {
+
+    removeAttachment.addEventListener(
+        "click",
+        function (event) {
+
+            event.preventDefault();
+
+            clearSelectedDocument();
+
+        }
+    );
+
+}
+
+
+// ==========================================================
+// CLEAR SELECTED DOCUMENT
+// ==========================================================
+
+function clearSelectedDocument() {
+
+    selectedDocumentFile = null;
+
+
+    if (documentInput) {
+
+        documentInput.value = "";
+
+    }
+
+
+    if (attachmentName) {
+
+        attachmentName.textContent = "";
+
+    }
+
+
+    if (attachmentPreview) {
+
+        attachmentPreview.style.display =
+            "none";
+
+    }
+
+}
 
     // ==========================================================
     // SEND MESSAGE
@@ -728,10 +763,10 @@ document.addEventListener("DOMContentLoaded", function () {
          */
 
         if (
-            !text &&
-            !selectedDocument &&
-            !selectedImage
-        ) {
+    !text &&
+    !selectedDocumentFile &&
+    !selectedImage
+) {
 
             console.log(
                 "Nothing to send."
@@ -768,18 +803,23 @@ document.addEventListener("DOMContentLoaded", function () {
             );
 
 
-            if (selectedDocument) {
+            if (
+    selectedDocumentFile &&
+    selectedDocumentFile instanceof File
+) {
 
-                formData.append(
-                    "document_id",
-                    selectedDocument
-                );
+    console.log(
+        "ADDING DOCUMENT TO FORMDATA:",
+        selectedDocumentFile.name
+    );
 
-                console.log(
-                    "Adding document:",
-                    selectedDocument
-                );
-            }
+    formData.append(
+        "document",
+        selectedDocumentFile,
+        selectedDocumentFile.name
+    );
+
+}
 
 
             if (
@@ -1142,36 +1182,81 @@ document.addEventListener("DOMContentLoaded", function () {
                                 : "";
 
 
-                        // ----------------------------------------
-                        // MESSAGE TEXT
-                        // ----------------------------------------
+// ----------------------------------------
+// MESSAGE TEXT
+// ----------------------------------------
+let messageHtml = "";
 
-                        let messageHtml = "";
+let cleanMessage = "";
+
+if (msg.message !== null && msg.message !== undefined) {
+    cleanMessage = String(msg.message);
+
+    // Remove spaces/tabs/newlines before the first character
+    cleanMessage = cleanMessage.replace(/^[\s]+/, "");
+
+    // Remove whitespace at the very end
+    cleanMessage = cleanMessage.replace(/[\s]+$/, "");
+}
+
+if (cleanMessage) {
+    messageHtml = `
+        <div class="message-text">${escapeHtml(cleanMessage)}</div>
+    `;
+}
+
+// ----------------------------------------
+// DOCUMENT
+// ----------------------------------------
+
+let documentHtml = "";
+
+const documentPath =
+    msg.attachment_path ||
+    msg.file_path ||
+    msg.document_path ||
+    "";
+
+const documentName =
+    msg.attachment_name ||
+    msg.file_name ||
+    msg.document_name ||
+    msg.title ||
+    "Attached document";
 
 
-                        if (
-                            msg.message &&
-                            String(
-                                msg.message
-                            ).trim()
-                        ) {
+if (documentPath) {
 
-                            messageHtml =
-                                `
-                                <div class="message-text">
-                                    ${
-                                        escapeHtml(
-                                            msg.message
-                                        ).replace(
-                                            /\n/g,
-                                            "<br>"
-                                        )
-                                    }
-                                </div>
-                                `;
-                        }
+    const documentUrl =
+        getFileUrl(documentPath);
 
+    documentHtml = `
+        <div class="message-document">
 
+            <a
+                href="${escapeAttribute(documentUrl)}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="document-link"
+            >
+
+                <span class="document-icon">
+                    <i class="fa fa-file"></i>
+                </span>
+
+                <span class="document-name">
+                    ${escapeHtml(documentName)}
+                </span>
+
+                <span class="document-open">
+                    <i class="fa fa-external-link"></i>
+                </span>
+
+            </a>
+
+        </div>
+    `;
+}
                         // ----------------------------------------
                         // IMAGE
                         // ----------------------------------------
@@ -1180,90 +1265,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
                         if (msg.image_path) {
+    const imageUrl = getFileUrl(msg.image_path);
 
-                            const imageUrl =
-                                getFileUrl(
-                                    msg.image_path
-                                );
+    imageHtml = `
+        <div class="chat-image">
+            <img
+                src="${escapeAttribute(imageUrl)}"
+                alt="Image"
+                loading="lazy"
+            >
+        </div>
+    `;
+}
 
-
-                            imageHtml =
-                                `
-                                <div class="message-image">
-                                    <a
-                                        href="${escapeAttribute(imageUrl)}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <img
-                                            src="${escapeAttribute(imageUrl)}"
-                                            alt="Image"
-                                            loading="lazy"
-                                            onclick="event.stopPropagation();"
-                                        >
-                                    </a>
-                                </div>
-                                `;
-                        }
-
-
-                        // ----------------------------------------
-                        // DOCUMENT
-                        // ----------------------------------------
-
-                        let documentHtml = "";
-
-
-                        const documentPath =
-                            msg.file_path ||
-                            msg.document_path ||
-                            msg.attachment_path;
-
-
-                        const documentName =
-                            msg.file_name ||
-                            msg.document_name ||
-                            "Attached document";
-
-
-                        if (documentPath) {
-
-                            const documentUrl =
-                                getFileUrl(
-                                    documentPath
-                                );
-
-
-                            documentHtml =
-                                `
-                                <div class="message-document">
-
-                                    <a
-                                        href="${escapeAttribute(documentUrl)}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="document-link"
-                                    >
-
-                                        <span class="document-icon">
-                                            <i class="fa fa-file"></i>
-                                        </span>
-
-                                        <span class="document-name">
-                                            ${escapeHtml(
-                                                documentName
-                                            )}
-                                        </span>
-
-                                        <span class="document-open">
-                                            <i class="fa fa-external-link"></i>
-                                        </span>
-
-                                    </a>
-
-                                </div>
-                                `;
-                        }
 
 
                         // ----------------------------------------
@@ -1279,33 +1293,32 @@ document.addEventListener("DOMContentLoaded", function () {
                         // MESSAGE HTML
                         // ----------------------------------------
 
-                        html +=
-                            `
-                            <div
-                                class="message ${type} ${unreadClass}"
-                                data-message-id="${escapeAttribute(
-                                    msg.id || ""
-                                )}"
-                            >
+                       html += `
+    <div
+        class="message-row ${type} ${unreadClass}"
+        data-message-id="${escapeAttribute(msg.id || "")}"
+    >
 
-                                <div class="message-content">
+        <div class="message-header">
 
-                                    ${messageHtml}
+            <span class="sender">
+                ${escapeHtml(msg.sender || "")}
+            </span>
 
-                                    ${imageHtml}
+            <span class="time">
+                ${escapeHtml(createdAt)}
+            </span>
 
-                                    ${documentHtml}
+        </div>
 
-                                    <div class="message-time">
-                                        ${escapeHtml(
-                                            createdAt
-                                        )}
-                                    </div>
+        ${messageHtml}
 
-                                </div>
+        ${imageHtml}
 
-                            </div>
-                            `;
+        ${documentHtml}
+
+    </div>
+`;
                     }
                 );
 
@@ -1778,13 +1791,13 @@ document.addEventListener("DOMContentLoaded", function () {
                             "Sent you an image";
 
                     } else if (
-                        message.file_name
-                    ) {
-
-                        messageText =
-                            "Sent you a document";
-
-                    } else {
+    message.attachment_name ||
+    message.attachment_path ||
+    message.file_name
+) {
+    messageText =
+        "Sent you a document";
+} else {
 
                         messageText =
                             "Sent you a new message";
