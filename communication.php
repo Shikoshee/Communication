@@ -344,6 +344,8 @@ m.created_at,
 m.read_at,
 m.document_id,
 m.image_path,
+m.attachment_path,
+m.attachment_name,
 CONCAT(
 u.first_name,
 
@@ -376,7 +378,7 @@ ON d.id=m.document_id
 WHERE m.conversation_id=?
 
 
-ORDER BY m.created_at DESC, m.id DESC
+ORDER BY m.created_at ASC, m.id ASC
 
 
 ",
@@ -390,35 +392,13 @@ $conversation['id']
 
 }
 
-
-
-
 /*
 |--------------------------------------------------------------------------
 | Approved Documents
 |--------------------------------------------------------------------------
 */
 
-$documents = fetchAll(
 
-"
-SELECT
-
-id,
-
-title,
-
-file_name
-
-FROM documents
-
-WHERE status='approved'
-
-ORDER BY title
-
-"
-
-);
 
 
 
@@ -526,9 +506,9 @@ placeholder="Search users..."
 
                 <?php else: ?>
 
-                    Start conversation
+    Start conversation
 
-                <?php endif; ?>
+<?php endif; ?>
 
             </small>
 
@@ -623,23 +603,80 @@ CHAT PANEL
 </div>
 
 
-<?php if(!empty($message['message'])): ?>
+<?php if (!empty($message['message'])): ?>
+<div class="message-text"><?= htmlspecialchars(trim($message['message']), ENT_QUOTES, 'UTF-8' ) ?></div><?php endif; ?>
+<?php if (!empty($message['attachment_path'])): ?>
 
-<div class="message-text">
-<?= htmlspecialchars($message['message']) ?>
-</div>
+    <div class="message-document">
 
-<?php endif; ?>
-<?php if(!empty($message['file_name'])): ?>
-<div class="attachment">
-    <i class="fa fa-file-pdf"></i>
-    <a
-        href="uploads/documents/<?= urlencode($message['file_name']) ?>"
-        target="_blank"
-    >
-        <?= htmlspecialchars($message['title']) ?>
-    </a>
-</div>
+        <a
+            href="<?= htmlspecialchars(
+                '/Communication/' . ltrim($message['attachment_path'], '/'),
+                ENT_QUOTES,
+                'UTF-8'
+            ) ?>"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="document-link"
+        >
+
+            <span class="document-icon">
+                <i class="fa fa-file"></i>
+            </span>
+
+            <span class="document-name">
+                <?= htmlspecialchars(
+                    $message['attachment_name'] ?? 'Attached document',
+                    ENT_QUOTES,
+                    'UTF-8'
+                ) ?>
+            </span>
+
+            <span class="document-open">
+                <i class="fa fa-external-link"></i>
+            </span>
+
+        </a>
+
+    </div>
+
+<?php elseif (!empty($message['file_path'])): ?>
+
+    <div class="message-document">
+
+        <a
+            href="<?= htmlspecialchars(
+                '/Communication/' . ltrim($message['file_path'], '/'),
+                ENT_QUOTES,
+                'UTF-8'
+            ) ?>"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="document-link"
+        >
+
+            <span class="document-icon">
+                <i class="fa fa-file"></i>
+            </span>
+
+            <span class="document-name">
+                <?= htmlspecialchars(
+                    $message['file_name']
+                    ?? $message['title']
+                    ?? 'Attached document',
+                    ENT_QUOTES,
+                    'UTF-8'
+                ) ?>
+            </span>
+
+            <span class="document-open">
+                <i class="fa fa-external-link"></i>
+            </span>
+
+        </a>
+
+    </div>
+
 <?php endif; ?>
 
 </div>
@@ -717,14 +754,25 @@ CHAT PANEL
          DOCUMENT BUTTON
     ======================================================= -->
 
-    <button
-        type="button"
-        class="attach-btn"
-        id="attachDocumentBtn"
-        title="Attach document"
-    >
-        <i class="fa fa-paperclip"></i>
-    </button>
+    <!-- DOCUMENT FILE INPUT -->
+
+<input
+    type="file"
+    id="documentInput"
+    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+    style="display:none;"
+>
+
+<!-- DOCUMENT ATTACHMENT BUTTON -->
+
+<button
+    type="button"
+    class="attach-btn"
+    id="attachDocumentBtn"
+    title="Attach document"
+>
+    <i class="fa fa-paperclip"></i>
+</button>
 
 
     <!-- ======================================================
@@ -799,57 +847,6 @@ const CURRENT_CONVERSATION = <?= $conversation['id'] ?? 0 ?>;
 
 <!-- Document Attachment Modal -->
 
-<div id="documentModal" class="document-modal">
-
-    <div class="document-box">
-
-        <h3>
-            Attach Document
-        </h3>
-
-
-        <select id="documentSelect">
-
-            <option value="">
-                Select Document
-            </option>
-
-
-            <?php foreach($documents as $doc): ?>
-
-            <option value="<?= $doc['id'] ?>">
-
-                <?= htmlspecialchars($doc['title']) ?>
-
-            </option>
-
-            <?php endforeach; ?>
-
-
-        </select>
-
-
-        <button 
-        id="selectDocument"
-        class="send-btn">
-
-            Attach
-
-        </button>
-
-
-        <button 
-        id="closeDocument"
-        class="attach-btn">
-
-            Cancel
-
-        </button>
-
-
-    </div>
-
-</div>
 
 
 
@@ -877,6 +874,8 @@ const CURRENT_CONVERSATION = <?= $conversation['id'] ?? 0 ?>;
     >
 
 </div>
+
+
 <?php
 
 include "includes/footer.php";
