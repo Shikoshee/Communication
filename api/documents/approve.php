@@ -49,7 +49,7 @@ if(empty($document["reviewed_file"])){
 
     echo json_encode([
         "success"=>false,
-        "message"=>"Please upload the signed copy before approving."
+        "message"=>"Please generate the signed copy before approving."
     ]);
 
     exit;
