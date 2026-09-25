@@ -10,7 +10,7 @@
 
     align-items:center;
 
-    background:linear-gradient(135deg,#0B5ED7,#063970);
+    background:linear-gradient(135deg,#4707f8,#063970);
 
 }
 
@@ -18,7 +18,7 @@
 
     width:420px;
 
-    background:#fff;
+    background:#c1bfc7;
 
     border-radius:12px;
 
@@ -56,7 +56,7 @@
 
     margin-top:10px;
 
-    color:#777;
+    color:#0c0c0c;
 
 }
 

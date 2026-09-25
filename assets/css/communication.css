@@ -10,7 +10,7 @@
 
     gap:0;
 
-    margin-top:25px;
+    margin-top:05px;
 
     height:calc(100vh - 100px);
 
@@ -272,123 +272,169 @@
 }
 
 
-/* =====================================
+/* ======================================================
    CHAT BODY
-===================================== */
+====================================================== */
 
-.chat-body{
+.chat-body {
+    background: #f5f6f8;
+    padding: 0 20px 20px 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.chat-body .message-row:first-child {
+    margin-top: 0;
+}
+/* ======================================================
+   MESSAGE ROW
+====================================================== */
 
-    background:#f5f6f8;
+.message-row {
+    display: flex;
+    flex-direction: column;
+    width: auto;
+    max-width: 70%;
+    margin-top: 0;
+    margin-bottom: 12px;
+}
 
-    padding:10px 14px;
+/* ======================================================
+   RECEIVED MESSAGE
+====================================================== */
 
-    overflow-y:auto;
+.message-row.received {
+    align-self: flex-start;
+    align-items: flex-start;
+    margin-left: 0;
+    margin-right: auto;
+}
 
+/* ======================================================
+   SENT MESSAGE
+====================================================== */
+
+.message-row.sent {
+    align-self: flex-end;
+    align-items: flex-end;
+    margin-left: auto;
+    margin-right: 0;
+}
+
+/* ======================================================
+   MESSAGE HEADER
+====================================================== */
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.sender {
+    font-size: 13px;
+    font-weight: 600;
+    color: #252423;
+}
+
+.time {
+    font-size: 11px;
+    color: #6b7280;
 }
 
 
-.message-row{
+/* ======================================================
+   MESSAGE TEXT
+====================================================== */
 
-    margin-bottom:16px;
 
-    display:flex;
+.message-text {
+    display: block;
 
-    flex-direction:column;
+    width: fit-content;
+    max-width: 100%;
 
-    width:fit-content;
+    padding: 9px 13px;
 
-    max-width:70%;
+    border-radius: 12px;
 
+    font-size: 14px;
+
+    /* Keep normal spacing between lines */
+    line-height: 1.5;
+
+    /* Preserve Enter/new lines without adding extra paragraph spacing */
+    white-space: pre-wrap;
+
+    overflow-wrap: anywhere;
+    word-break: break-word;
+
+    text-align: left;
+    box-sizing: border-box;
+
+    /* Prevent browser/default spacing */
+    margin: 0;
 }
 
 
-.message-header{
 
-    display:flex;
 
-    align-items:center;
+/* ======================================================
+   SENT BUBBLE
+====================================================== */
 
-    gap:10px;
-
-    margin-bottom:4px;
-
-}
-
-.sender{
-
-    font-size:13px;
-
-    font-weight:600;
-
-    color:#252423;
-
+.message-row.sent .message-text {
+    background: #e8f1ff;
+    color: #252423;
+    border-top-right-radius: 4px;
 }
 
 
-.time{
+/* ======================================================
+   RECEIVED BUBBLE
+====================================================== */
 
-    font-size:11px;
+.message-row.received .message-text {
+    background: #ffffff;
+    color: #252423;
 
-    color:#6b7280;
+    border: 1px solid #e5e7eb;
 
-}
-
-.message-text{
-
-    width:max-content;
-
-    max-width:100%;
-
-    display:block;
-
-    padding:8px 12px;
-
-    border-radius:10px;
-
-    font-size:14px;
-
-    line-height:1.5;
-
-    white-space:pre-wrap;
-
-    overflow-wrap:anywhere;
-
+    border-top-left-radius: 4px;
 }
 
 
-/* Sent messages */
 
-.sent{
 
-    margin-left:auto;
+/* ======================================================
+   SENT BUBBLE
+====================================================== */
 
-    align-items:flex-end;
+.sent .message-text {
+    background: #e8f1ff;
+    color: #252423;
 
+    border-top-right-radius: 4px;
 }
 
-
-.sent .message-text{
-
-    background:#e8f1ff;
-
-    color:#252423;
-
-}
 /* Received messages */
 
-.received{
-
-    align-items:flex-start;
-
-}
 
 
-.received .message-text{
 
-    background:#ffffff;
+/* ======================================================
+   RECEIVED BUBBLE
+====================================================== */
 
-    border:1px solid #e5e7eb;
+.received .message-text {
+    background: #ffffff;
+    color: #252423;
 
+    border: 1px solid #e5e7eb;
+
+    border-top-left-radius: 4px;
 }
 
 .received .attachment{
@@ -408,27 +454,37 @@
    ATTACHMENTS
 ===================================== */
 
+/* ======================================================
+   ATTACHMENTS
+====================================================== */
 
-.attachment{
+.attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 
-    display:inline-flex;
+    width: fit-content;
+    max-width: 100%;
 
-    align-items:center;
+    margin-top: 8px;
+    padding: 8px 10px;
 
-    gap:8px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
 
-    margin-top:8px;
+    background: #fff;
 
-    padding:8px 10px;
+    font-size: 13px;
+}
 
-    border:1px solid #ddd;
 
-    border-radius:6px;
+.received .attachment {
+    align-self: flex-start;
+}
 
-    background:#fff;
 
-    font-size:13px;
-
+.sent .attachment {
+    align-self: flex-end;
 }
 .attachment a{
 
@@ -801,10 +857,8 @@
     }
 
 
-    .message{
-
+     .message-row {
         max-width:90%;
-
     }
 
 
@@ -1027,4 +1081,155 @@
 .message-row.unread-message .sender,
 .message-row.unread-message .message-text {
     font-weight: 700;
+}
+
+
+/* ==========================================================
+   CHAT IMAGES
+========================================================== */
+/* ======================================================
+   CHAT IMAGES
+====================================================== */
+
+/* ======================================================
+   CHAT IMAGE THUMBNAIL
+====================================================== */
+
+.chat-image {
+    margin-top: 10px;
+    width: 160px;
+    height: 110px;
+    overflow: hidden;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #e5e7eb;
+    position: relative;
+}
+
+.chat-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s ease,
+                opacity 0.2s ease;
+}
+
+
+/* Small zoom effect when hovering */
+
+.chat-image:hover img {
+    transform: scale(1.03);
+    opacity: 0.92;
+}
+
+
+/* Keep received images on left */
+
+.received .chat-image {
+    align-self: flex-start;
+}
+
+
+/* Keep sent images on right */
+
+.sent .chat-image {
+    align-self: flex-end;
+}
+
+
+/* ======================================================
+   FULL IMAGE VIEWER
+====================================================== */
+
+.image-viewer {
+    display: none;
+
+    position: fixed;
+
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    background: rgba(0, 0, 0, 0.85);
+
+    align-items: center;
+    justify-content: center;
+
+    z-index: 10000;
+
+    padding: 30px;
+
+    box-sizing: border-box;
+}
+
+
+/* Image when opened */
+
+.image-viewer img {
+    max-width: 90vw;
+    max-height: 90vh;
+
+    width: auto;
+    height: auto;
+
+    object-fit: contain;
+
+    border-radius: 8px;
+
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+}
+
+
+/* Close button */
+
+.image-viewer-close {
+    position: absolute;
+
+    top: 20px;
+    right: 25px;
+
+    width: 42px;
+    height: 42px;
+
+    border: none;
+
+    border-radius: 50%;
+
+    background: rgba(255,255,255,.15);
+
+    color: #fff;
+
+    font-size: 28px;
+
+    line-height: 42px;
+
+    text-align: center;
+
+    cursor: pointer;
+
+    transition: .2s;
+}
+
+
+.image-viewer-close:hover {
+    background: rgba(255,255,255,.3);
+}
+
+.message-document .document-link {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.message-document .document-link:hover {
+    color: #0056b3;
+}
+
+.message-document .document-icon,
+.message-document .document-name,
+.message-document .document-open {
+    color: inherit;
 }
