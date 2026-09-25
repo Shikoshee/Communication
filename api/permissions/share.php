@@ -7,15 +7,7 @@ Auth::protect();
 
 header('Content-Type: application/json');
 
-
-/*
- * ==========================================================
- * CURRENT USER
- * ==========================================================
- */
-
 $user = Auth::getCurrentUser();
-
 
 if (!$user) {
 
@@ -25,27 +17,23 @@ if (!$user) {
     ]);
 
     exit;
-
 }
 
 
-$currentUserId = (int)(
-    $user['id'] ?? 0
-);
+/*
+|--------------------------------------------------------------------------
+| CURRENT USER
+|--------------------------------------------------------------------------
+*/
 
+$currentUserId = (int)($user['id'] ?? 0);
 
 $currentRole = strtolower(
     trim(
-        (string)($user['role'] ?? '')
+        (string)($user['role'] ?? 'user')
     )
 );
 
-
-/*
- * ==========================================================
- * ROLE
- * ==========================================================
- */
 
 $isAdmin = in_array(
     $currentRole,
@@ -65,92 +53,35 @@ $isManager = (
 
 
 /*
- * ==========================================================
- * ONLY ADMIN / MANAGER
- * ==========================================================
- */
-
-if (!$isAdmin && !$isManager) {
-
-    echo json_encode([
-        "success" => false,
-        "message" => "Access denied."
-    ]);
-
-    exit;
-
-}
-
-
-/*
- * ==========================================================
- * GET CURRENT USER DEPARTMENT
- * ==========================================================
- */
-
-$managerDepartmentId = (int)(
-    $user['department_id'] ?? 0
-);
-
-
-if ($isManager && $managerDepartmentId <= 0) {
-
-    $manager = fetchRow(
-
-        "SELECT department_id
-         FROM users
-         WHERE id=?
-         LIMIT 1",
-
-        [
-            $currentUserId
-        ]
-
-    );
-
-
-    $managerDepartmentId = (int)(
-        $manager['department_id'] ?? 0
-    );
-
-}
-
-
-/*
- * ==========================================================
- * MANAGER MUST HAVE DEPARTMENT
- * ==========================================================
- */
-
-if ($isManager && $managerDepartmentId <= 0) {
-
-    echo json_encode([
-        "success" => false,
-        "message" => "Your account is not assigned to a department."
-    ]);
-
-    exit;
-
-}
-
-
-/*
- * ==========================================================
- * INPUT
- * ==========================================================
- */
+|--------------------------------------------------------------------------
+| DOCUMENT
+|--------------------------------------------------------------------------
+*/
 
 $documentId = (int)(
     $_POST['document_id'] ?? 0
 );
 
 
-$users = $_POST['users'] ?? [];
+if ($documentId <= 0) {
+
+    echo json_encode([
+        "success" => false,
+        "message" => "Invalid document."
+    ]);
+
+    exit;
+}
 
 
 /*
- * Make sure users is an array.
- */
+|--------------------------------------------------------------------------
+| USERS
+|--------------------------------------------------------------------------
+*/
+
+$users = $_POST['users'] ?? [];
+
 
 if (!is_array($users)) {
 
@@ -161,10 +92,6 @@ if (!is_array($users)) {
 }
 
 
-/*
- * Convert to integers and remove duplicates.
- */
-
 $users = array_values(
     array_unique(
         array_filter(
@@ -173,31 +100,11 @@ $users = array_values(
                 $users
             ),
             function ($id) {
-
                 return $id > 0;
-
             }
         )
     )
 );
-
-
-/*
- * ==========================================================
- * VALIDATE DOCUMENT
- * ==========================================================
- */
-
-if ($documentId <= 0) {
-
-    echo json_encode([
-        "success" => false,
-        "message" => "Please select a valid document."
-    ]);
-
-    exit;
-
-}
 
 
 if (empty($users)) {
@@ -208,22 +115,21 @@ if (empty($users)) {
     ]);
 
     exit;
-
 }
 
 
 /*
- * ==========================================================
- * GET DOCUMENT
- * ==========================================================
- */
+|--------------------------------------------------------------------------
+| GET DOCUMENT
+|--------------------------------------------------------------------------
+*/
 
 $document = fetchRow(
 
     "SELECT
         id,
-        department_id,
-        uploaded_by
+        uploaded_by,
+        department_id
      FROM documents
      WHERE id=?
      LIMIT 1",
@@ -243,93 +149,152 @@ if (!$document) {
     ]);
 
     exit;
-
 }
 
 
 /*
- * ==========================================================
- * MANAGER DOCUMENT SECURITY
- * ==========================================================
- *
- * Managers can only share documents belonging
- * to their own department.
- */
+|--------------------------------------------------------------------------
+| SHARE AUTHORIZATION
+|--------------------------------------------------------------------------
+|
+| Admin:
+|     Can share any document.
+|
+| Manager:
+|     Can share documents belonging
+|     to their own department.
+|
+| Regular user:
+|     Must have can_share permission.
+|
+*/
 
-if ($isManager && !$isAdmin) {
+$allowedToShare = false;
 
-    $documentDepartmentId = (int)(
-        $document['department_id'] ?? 0
+
+if ($isAdmin) {
+
+    $allowedToShare = true;
+
+}
+
+
+elseif ($isManager) {
+
+    $managerDepartmentId = (int)(
+        $user['department_id'] ?? 0
     );
 
 
+    if ($managerDepartmentId <= 0) {
+
+        $manager = fetchRow(
+
+            "SELECT department_id
+             FROM users
+             WHERE id=?
+             LIMIT 1",
+
+            [
+                $currentUserId
+            ]
+
+        );
+
+        $managerDepartmentId = (int)(
+            $manager['department_id'] ?? 0
+        );
+
+    }
+
+
     if (
-        $documentDepartmentId <= 0
-        ||
-        $documentDepartmentId !== $managerDepartmentId
+        $managerDepartmentId > 0
+        &&
+        (int)$document['department_id']
+        ===
+        $managerDepartmentId
     ) {
 
-        echo json_encode([
-            "success" => false,
-            "message" => "Access denied. You can only share documents belonging to your department."
-        ]);
-
-        exit;
+        $allowedToShare = true;
 
     }
 
 }
 
 
+else {
+
+    $permission = fetchRow(
+
+        "SELECT can_share
+         FROM permissions
+         WHERE user_id=?
+         LIMIT 1",
+
+        [
+            $currentUserId
+        ]
+
+    );
+
+
+    if (
+        $permission
+        &&
+        !empty($permission['can_share'])
+    ) {
+
+        $allowedToShare = true;
+
+    }
+
+}
+
+
+if (!$allowedToShare) {
+
+    echo json_encode([
+        "success" => false,
+        "message" => "You do not have permission to share this document."
+    ]);
+
+    exit;
+}
+
+
 /*
- * ==========================================================
- * PERMISSION VALUES
- * ==========================================================
- */
+|--------------------------------------------------------------------------
+| SHARE WITH USERS
+|--------------------------------------------------------------------------
+*/
 
-$canView = !empty($_POST['can_view'])
-    ? 1
-    : 0;
-
-
-$canEdit = !empty($_POST['can_edit'])
-    ? 1
-    : 0;
-
-
-$canShare = !empty($_POST['can_share'])
-    ? 1
-    : 0;
-
-
-/*
- * ==========================================================
- * PROCESS EACH SELECTED USER
- * ==========================================================
- */
-
-$savedCount = 0;
+$sharedCount = 0;
 
 
 foreach ($users as $targetUserId) {
 
+    /*
+     * Do not create a share record
+     * for the person sharing it.
+     */
+
+    if ($targetUserId === $currentUserId) {
+        continue;
+    }
+
 
     /*
-     * ------------------------------------------------------
-     * GET TARGET USER
-     * ------------------------------------------------------
+     * Make sure target user exists
+     * and is active.
      */
 
     $targetUser = fetchRow(
 
-        "SELECT
-            id,
-            first_name,
-            last_name,
-            department_id,
-            status
+        "SELECT id
          FROM users
          WHERE id=?
+         AND status='active'
          LIMIT 1",
 
         [
@@ -340,75 +305,18 @@ foreach ($users as $targetUserId) {
 
 
     if (!$targetUser) {
-
         continue;
-
     }
 
 
     /*
-     * ------------------------------------------------------
-     * ONLY ACTIVE USERS
-     * ------------------------------------------------------
-     */
-
-    if (
-        isset($targetUser['status'])
-        &&
-        $targetUser['status'] !== 'active'
-    ) {
-
-        continue;
-
-    }
-
-
-    /*
-     * ------------------------------------------------------
-     * MANAGER USER SECURITY
-     * ------------------------------------------------------
-     *
-     * A manager can only share with users
-     * belonging to their own department.
-     */
-
-    if ($isManager && !$isAdmin) {
-
-        $targetDepartmentId = (int)(
-            $targetUser['department_id'] ?? 0
-        );
-
-
-        if (
-            $targetDepartmentId <= 0
-            ||
-            $targetDepartmentId !== $managerDepartmentId
-        ) {
-
-            echo json_encode([
-                "success" => false,
-                "message" =>
-                    "Access denied. You can only share documents with users in your department."
-            ]);
-
-            exit;
-
-        }
-
-    }
-
-
-    /*
-     * ------------------------------------------------------
-     * CHECK EXISTING USER PERMISSION
-     * ------------------------------------------------------
+     * Check existing share.
      */
 
     $existing = fetchRow(
 
-        "SELECT
-            id
-         FROM document_permissions
+        "SELECT id
+         FROM document_shares
          WHERE document_id=?
          AND user_id=?
          LIMIT 1",
@@ -422,137 +330,99 @@ foreach ($users as $targetUserId) {
 
 
     /*
-     * ------------------------------------------------------
-     * UPDATE
-     * ------------------------------------------------------
+     * Already shared.
      */
 
     if ($existing) {
 
-        $result = updateData(
+        /*
+         * Update who shared it most recently.
+         */
 
-            "document_permissions",
+        updateData(
+
+            "document_shares",
 
             [
-
-                "can_view" => $canView,
-
-                "can_edit" => $canEdit,
-
-                "can_share" => $canShare
-
+                "shared_by" => $currentUserId
             ],
 
             [
-
-                "document_id" => $documentId,
-
-                "user_id" => $targetUserId
-
+                "id" => (int)$existing['id']
             ]
 
         );
 
+        $sharedCount++;
+
+        continue;
     }
 
 
     /*
-     * ------------------------------------------------------
-     * INSERT
-     * ------------------------------------------------------
+     * Create new share.
      */
 
-    else {
+    $result = insertData(
 
-        $result = insertData(
+        "document_shares",
 
-            "document_permissions",
+        [
 
-            [
+            "document_id" => $documentId,
 
-                "document_id" => $documentId,
+            "user_id" => $targetUserId,
 
-                "user_id" => $targetUserId,
+            "shared_by" => $currentUserId
 
-                "department_id" => null,
+        ]
 
-                "can_view" => $canView,
+    );
 
-                "can_edit" => $canEdit,
-
-                "can_share" => $canShare
-
-            ]
-
-        );
-
-    }
-
-
-    /*
-     * ------------------------------------------------------
-     * DATABASE RESULT
-     * ------------------------------------------------------
-     */
 
     if (
-        !is_array($result)
-        ||
-        empty($result['success'])
+        is_array($result)
+        &&
+        !empty($result['success'])
     ) {
 
-        echo json_encode([
-
-            "success" => false,
-
-            "message" =>
-                $result['error']
-                ?? "Unable to save permissions for the selected user."
-
-        ]);
-
-        exit;
+        $sharedCount++;
 
     }
-
-
-    $savedCount++;
 
 }
 
 
 /*
- * ==========================================================
- * NOTHING SAVED
- * ==========================================================
- */
+|--------------------------------------------------------------------------
+| RESULT
+|--------------------------------------------------------------------------
+*/
 
-if ($savedCount <= 0) {
+if ($sharedCount <= 0) {
 
     echo json_encode([
+
         "success" => false,
-        "message" => "No permissions were saved."
+
+        "message" => "No document shares were created."
+
     ]);
 
     exit;
-
 }
 
-
-/*
- * ==========================================================
- * SUCCESS
- * ==========================================================
- */
 
 echo json_encode([
 
     "success" => true,
 
     "message" =>
-        $savedCount === 1
-            ? "Document permission saved successfully."
-            : $savedCount . " users were granted access successfully."
+        "Document shared with "
+        . $sharedCount
+        . " user"
+        . ($sharedCount === 1 ? "" : "s")
+        . " successfully."
 
 ]);
 
