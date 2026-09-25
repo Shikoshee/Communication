@@ -1,0 +1,23 @@
+Array
+(
+    [POST] => Array
+        (
+            [conversation_id] => 11
+            [message] => 
+        )
+
+    [FILES] => Array
+        (
+            [document] => Array
+                (
+                    [name] => chat_doc_66754fcd06b960351b3a57b55243de79.pdf
+                    [full_path] => chat_doc_66754fcd06b960351b3a57b55243de79.pdf
+                    [type] => application/pdf
+                    [tmp_name] => C:\xampp\tmp\php72F7.tmp
+                    [error] => 0
+                    [size] => 176986
+                )
+
+        )
+
+)
