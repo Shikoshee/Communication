@@ -1,42 +1,58 @@
-
 <?php
 
 /**
- * Digital Document Signing Endpoint
+ * Document Digital Signature Endpoint
  *
- * Workflow:
- * 1. Receive signature PNG from browser
- * 2. Verify logged-in user can approve the document
- * 3. Convert DOC/DOCX to PDF using LibreOffice
- * 4. Embed signature into the final PDF
- * 5. Save signed PDF as reviewed_file
- * 6. Save reviewer and timestamp
+ * Coordinate system:
+ *
+ * x      = PDF points from LEFT
+ * y      = PDF points from BOTTOM
+ * width  = PDF points
+ * height = PDF points
+ *
+ * The browser uses PDF.js to convert the displayed
+ * browser coordinates into real PDF coordinates.
+ *
+ * FPDI/FPDF is configured to use POINTS as its
+ * document unit so the coordinates can be used
+ * directly.
  */
 
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
-
-header('Content-Type: application/json');
+ini_set("display_errors", "0");
 
 require_once "../../includes/config.php";
 require_once "../../includes/auth.php";
-require_once "../../includes/ApprovalRouter.php";
+require_once __DIR__ . "/../../includes/ApprovalRouter.php";
+require_once __DIR__ . "/../../vendor/autoload.php";
+
+use setasign\Fpdi\Fpdi;
 
 Auth::protect();
 
-$user = Auth::getCurrentUser();
+header(
+    "Content-Type: application/json; charset=UTF-8"
+);
 
 
-/**
- * Send JSON response and stop execution.
- */
-function jsonResponse($success, $message, $extra = [])
-{
+/* ================================================================
+   RESPONSE
+   ================================================================ */
+
+function signResponse(
+    bool $success,
+    string $message,
+    array $extra = [],
+    int $statusCode = 200
+) {
+
+    http_response_code($statusCode);
+
     echo json_encode(
         array_merge(
             [
-                'success' => $success,
-                'message' => $message
+                "success" => $success,
+                "message" => $message
             ],
             $extra
         )
@@ -46,259 +62,564 @@ function jsonResponse($success, $message, $extra = [])
 }
 
 
-/**
- * Only POST requests are accepted.
- */
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+/* ================================================================
+   REQUEST METHOD
+   ================================================================ */
 
-    jsonResponse(
-        false,
-        'Invalid request method.'
-    );
-
-}
-
-
-/**
- * Validate document ID.
- */
-if (!isset($_POST['id'])) {
-
-    jsonResponse(
-        false,
-        'Document ID missing.'
-    );
-
-}
-
-
-$documentId = (int)$_POST['id'];
-
-if ($documentId <= 0) {
-
-    jsonResponse(
-        false,
-        'Invalid document ID.'
-    );
-
-}
-
-
-/**
- * Validate signature.
- */
 if (
-    !isset($_POST['signature']) ||
-    empty($_POST['signature'])
+    ($_SERVER["REQUEST_METHOD"] ?? "") !== "POST"
 ) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'Signature missing.'
+        "Invalid request method.",
+        [],
+        405
     );
-
 }
 
 
-$signatureData = $_POST['signature'];
+/* ================================================================
+   USER
+   ================================================================ */
 
+$user =
+    Auth::getCurrentUser();
 
-/**
- * Only accept PNG data URLs.
- */
 if (
-    strpos(
-        $signatureData,
-        'data:image/png;base64,'
-    ) !== 0
+    !$user ||
+    empty($user["id"])
 ) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'Invalid signature format.'
+        "Unable to identify the current user.",
+        [],
+        401
     );
-
 }
 
 
-/**
- * Remove data URL prefix.
- */
-$signatureBase64 = substr(
-    $signatureData,
-    strlen('data:image/png;base64,')
-);
+/* ================================================================
+   DOCUMENT ID
+   ================================================================ */
 
-
-/**
- * Decode signature.
- */
-$signatureBinary = base64_decode(
-    $signatureBase64,
-    true
-);
-
-
-if ($signatureBinary === false) {
-
-    jsonResponse(
-        false,
-        'Unable to decode signature.'
+$documentId =
+    (int)(
+        $_POST["id"] ?? 0
     );
 
+if (
+    $documentId <= 0
+) {
+
+    signResponse(
+        false,
+        "Invalid document ID.",
+        [],
+        400
+    );
 }
 
 
-/**
- * Prevent unnecessarily large signature uploads.
+/* ================================================================
+   SIGNATURE
+   ================================================================ */
+
+$signatureData =
+    trim(
+        $_POST["signature"] ?? ""
+    );
+
+
+if (
+    $signatureData === ""
+) {
+
+    signResponse(
+        false,
+        "No signature was provided.",
+        [],
+        400
+    );
+}
+
+
+/*
+ * IMPORTANT:
  *
- * Maximum: 2 MB
+ * Correct regex:
+ *
+ * data:image/png;base64,...
  */
-if (strlen($signatureBinary) > 2 * 1024 * 1024) {
+if (
+    !preg_match(
+        '/^data:image\/png;base64,/i',
+        $signatureData
+    )
+) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'Signature image is too large.'
+        "Invalid signature format. PNG signature required.",
+        [],
+        400
     );
-
 }
 
 
-/**
- * Locate document.
- */
-$document = fetchRow(
-    "SELECT *
-     FROM documents
-     WHERE id = ?",
-    [$documentId]
-);
+/* ================================================================
+   DECODE SIGNATURE
+   ================================================================ */
+
+$signatureBase64 =
+    preg_replace(
+        '/^data:image\/png;base64,/i',
+        "",
+        $signatureData
+    );
+
+
+$signatureBinary =
+    base64_decode(
+        $signatureBase64,
+        true
+    );
+
+
+if (
+    $signatureBinary === false
+) {
+
+    signResponse(
+        false,
+        "The signature image could not be decoded.",
+        [],
+        400
+    );
+}
+
+
+/* ================================================================
+   VALIDATE PNG
+   ================================================================ */
+
+$imageInfo =
+    @getimagesizefromstring(
+        $signatureBinary
+    );
+
+
+if (
+    $imageInfo === false ||
+    ($imageInfo["mime"] ?? "") !== "image/png"
+) {
+
+    signResponse(
+        false,
+        "The signature image is not a valid PNG.",
+        [],
+        400
+    );
+}
+
+
+/* ================================================================
+   SIGNATURE SIZE
+   ================================================================ */
+
+if (
+    strlen($signatureBinary) >
+    5 * 1024 * 1024
+) {
+
+    signResponse(
+        false,
+        "The signature image is too large.",
+        [],
+        400
+    );
+}
+
+
+/* ================================================================
+   PLACEMENTS
+   ================================================================ */
+
+$placementsJson =
+    trim(
+        $_POST["placements"] ?? ""
+    );
+
+
+if (
+    $placementsJson === ""
+) {
+
+    signResponse(
+        false,
+        "No signature placement was provided.",
+        [],
+        400
+    );
+}
+
+
+$placements =
+    json_decode(
+        $placementsJson,
+        true
+    );
+
+
+if (
+    !is_array($placements) ||
+    empty($placements)
+) {
+
+    signResponse(
+        false,
+        "Invalid signature placement data.",
+        [],
+        400
+    );
+}
+
+
+/* ================================================================
+   VALIDATE PLACEMENTS
+   ================================================================ */
+
+$validatedPlacements = [];
+
+
+foreach (
+    $placements as $placement
+) {
+
+    if (
+        !is_array($placement)
+    ) {
+
+        signResponse(
+            false,
+            "Invalid signature placement.",
+            [],
+            400
+        );
+    }
+
+
+    /*
+     * New coordinate system marker.
+     */
+    $coordinateSystem =
+        strtolower(
+            trim(
+                $placement["coordinateSystem"]
+                    ?? ""
+            )
+        );
+
+
+    if (
+        $coordinateSystem !== "pdf"
+    ) {
+
+        signResponse(
+            false,
+            "Invalid coordinate system. PDF coordinates are required.",
+            [],
+            400
+        );
+    }
+
+
+    $page =
+        (int)(
+            $placement["page"] ?? 0
+        );
+
+
+    $x =
+        (float)(
+            $placement["x"] ?? -1
+        );
+
+
+    $y =
+        (float)(
+            $placement["y"] ?? -1
+        );
+
+
+    $width =
+        (float)(
+            $placement["width"] ?? 0
+        );
+
+
+    $height =
+        (float)(
+            $placement["height"] ?? 0
+        );
+
+
+    /* ------------------------------------------------------------
+       BASIC VALIDATION
+    ------------------------------------------------------------ */
+
+    if (
+        $page < 1
+    ) {
+
+        signResponse(
+            false,
+            "Invalid signature page.",
+            [],
+            400
+        );
+    }
+
+
+    if (
+        !is_finite($x) ||
+        !is_finite($y) ||
+        !is_finite($width) ||
+        !is_finite($height)
+    ) {
+
+        signResponse(
+            false,
+            "Invalid signature coordinates.",
+            [],
+            400
+        );
+    }
+
+
+    if (
+        $x < 0 ||
+        $y < 0
+    ) {
+
+        signResponse(
+            false,
+            "Signature coordinates cannot be negative.",
+            [],
+            400
+        );
+    }
+
+
+    if (
+        $width <= 0 ||
+        $height <= 0
+    ) {
+
+        signResponse(
+            false,
+            "Signature dimensions must be greater than zero.",
+            [],
+            400
+        );
+    }
+
+
+    /*
+     * Prevent obviously malicious/accidental
+     * oversized values.
+     */
+    if (
+        $width > 5000 ||
+        $height > 5000 ||
+        $x > 10000 ||
+        $y > 10000
+    ) {
+
+        signResponse(
+            false,
+            "Signature coordinates are outside the allowed range.",
+            [],
+            400
+        );
+    }
+
+
+    $validatedPlacements[] = [
+
+        "page" =>
+            $page,
+
+        "x" =>
+            $x,
+
+        "y" =>
+            $y,
+
+        "width" =>
+            $width,
+
+        "height" =>
+            $height
+    ];
+}
+
+
+/* ================================================================
+   GET DOCUMENT
+   ================================================================ */
+
+$document =
+    fetchRow(
+        "
+        SELECT *
+        FROM documents
+        WHERE id = ?
+        ",
+        [
+            $documentId
+        ]
+    );
 
 
 if (!$document) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'Document not found.'
+        "Document not found.",
+        [],
+        404
     );
-
 }
 
 
-/**
- * Verify that the current user is allowed
- * to approve/sign this document.
- */
+/* ================================================================
+   APPROVAL PERMISSION
+   ================================================================ */
+
 if (
     !ApprovalRouter::canUserApproveDocument(
-        $user['id'],
+        (int)$user["id"],
         $documentId
     )
 ) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'You are not authorized to sign this document.'
+        "You are not authorized to sign this document.",
+        [],
+        403
     );
-
 }
 
 
-/**
- * Determine project root.
- *
- * This file is:
- *
- * Communication/api/documents/sign.php
- *
- * dirname(__DIR__, 2) therefore gives:
- *
- * Communication/
- */
-$projectRoot = dirname(
-    __DIR__,
-    2
-);
+/* ================================================================
+   PROJECT ROOT
+   ================================================================ */
 
-
-/**
- * Resolve original document path.
- *
- * The database normally stores something such as:
- *
- * uploads/documents/example.pdf
- *
- * We convert that into the physical Windows path.
- */
-$storedFilePath = $document['file_path'] ?? '';
-
-if (empty($storedFilePath)) {
-
-    jsonResponse(
-        false,
-        'The document does not have a file path.'
+$projectRoot =
+    dirname(
+        __DIR__,
+        2
     );
 
+
+$realProjectRoot =
+    realpath(
+        $projectRoot
+    );
+
+
+if (
+    $realProjectRoot === false
+) {
+
+    signResponse(
+        false,
+        "Unable to determine application directory.",
+        [],
+        500
+    );
 }
 
 
-/**
- * Normalize path separators.
- */
-$storedFilePath = str_replace(
-    ['/', '\\'],
-    DIRECTORY_SEPARATOR,
-    $storedFilePath
-);
+/* ================================================================
+   ORIGINAL FILE
+   ================================================================ */
+
+$storedFilePath =
+    trim(
+        $document["file_path"] ?? ""
+    );
 
 
-/**
- * Remove leading separators.
- */
-$storedFilePath = ltrim(
-    $storedFilePath,
-    "\\/"
-);
+if (
+    $storedFilePath === ""
+) {
+
+    signResponse(
+        false,
+        "The document does not have an uploaded file.",
+        [],
+        404
+    );
+}
 
 
-/**
- * Build absolute path.
- */
-$originalFile = $projectRoot .
+$storedFilePath =
+    str_replace(
+        [
+            "/",
+            "\\"
+        ],
+        DIRECTORY_SEPARATOR,
+        $storedFilePath
+    );
+
+
+$storedFilePath =
+    ltrim(
+        $storedFilePath,
+        "\\/"
+    );
+
+
+$originalFile =
+    $projectRoot .
     DIRECTORY_SEPARATOR .
     $storedFilePath;
 
 
-/**
- * Security check:
- * prevent paths from escaping project directory.
- */
-$realProjectRoot = realpath(
-    $projectRoot
-);
-
-$realOriginalFile = realpath(
-    $originalFile
-);
+$realOriginalFile =
+    realpath(
+        $originalFile
+    );
 
 
 if (
-    $realProjectRoot === false ||
     $realOriginalFile === false
 ) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'The original document file could not be located.'
+        "The original document file could not be found.",
+        [],
+        404
     );
-
 }
 
 
-$projectPrefix = rtrim(
-    $realProjectRoot,
-    DIRECTORY_SEPARATOR
-) . DIRECTORY_SEPARATOR;
+/* ================================================================
+   PATH SECURITY
+   ================================================================ */
+
+$projectPrefix =
+    rtrim(
+        $realProjectRoot,
+        DIRECTORY_SEPARATOR
+    ) .
+    DIRECTORY_SEPARATOR;
 
 
 if (
@@ -308,88 +629,84 @@ if (
     ) !== 0
 ) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'Invalid document file path.'
+        "Invalid document file path.",
+        [],
+        403
     );
-
 }
 
 
-$originalFile = $realOriginalFile;
+$originalFile =
+    $realOriginalFile;
 
 
-/**
- * Verify original file exists.
- */
-if (!file_exists($originalFile)) {
+if (
+    !is_file($originalFile) ||
+    !is_readable($originalFile)
+) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'The original document file does not exist on the server.'
+        "The original document cannot be read.",
+        [],
+        404
     );
-
 }
 
 
-/**
- * Determine extension.
- */
-$extension = strtolower(
-    pathinfo(
-        $originalFile,
-        PATHINFO_EXTENSION
-    )
-);
+/* ================================================================
+   EXTENSION
+   ================================================================ */
 
-
-/**
- * Supported document types.
- */
-$allowedExtensions = [
-    'pdf',
-    'doc',
-    'docx'
-];
+$extension =
+    strtolower(
+        pathinfo(
+            $originalFile,
+            PATHINFO_EXTENSION
+        )
+    );
 
 
 if (
     !in_array(
         $extension,
-        $allowedExtensions,
+        [
+            "pdf",
+            "doc",
+            "docx"
+        ],
         true
     )
 ) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'This document type cannot currently be digitally signed. Supported types: PDF, DOC and DOCX.'
+        "Unsupported document type.",
+        [],
+        415
     );
-
 }
 
 
-/**
- * Working directories.
- */
+/* ================================================================
+   DOCUMENT DIRECTORIES
+   ================================================================ */
+
 $documentsDirectory =
     $projectRoot .
     DIRECTORY_SEPARATOR .
-    'uploads' .
+    "uploads" .
     DIRECTORY_SEPARATOR .
-    'documents';
+    "documents";
 
 
-$tempDirectory =
-    $documentsDirectory .
-    DIRECTORY_SEPARATOR .
-    'signed_temp';
-
-
-/**
- * Create directories if necessary.
- */
-if (!is_dir($documentsDirectory)) {
+if (
+    !is_dir(
+        $documentsDirectory
+    )
+) {
 
     if (
         !mkdir(
@@ -399,76 +716,70 @@ if (!is_dir($documentsDirectory)) {
         )
     ) {
 
-        jsonResponse(
+        signResponse(
             false,
-            'Unable to create the documents directory.'
+            "Unable to create documents directory.",
+            [],
+            500
         );
-
     }
-
 }
 
 
-if (!is_dir($tempDirectory)) {
+$signedTempDirectory =
+    $documentsDirectory .
+    DIRECTORY_SEPARATOR .
+    "signed_temp";
+
+
+if (
+    !is_dir(
+        $signedTempDirectory
+    )
+) {
 
     if (
         !mkdir(
-            $tempDirectory,
+            $signedTempDirectory,
             0775,
             true
         )
     ) {
 
-        jsonResponse(
+        signResponse(
             false,
-            'Unable to create the temporary signing directory.'
+            "Unable to create signing temporary directory.",
+            [],
+            500
         );
-
     }
-
 }
 
 
-/**
- * Generate unique working names.
- */
+/* ================================================================
+   UNIQUE ID
+   ================================================================ */
+
 $uniqueId =
-    date('Ymd_His') .
-    '_' .
+    date("Ymd_His") .
+    "_" .
     bin2hex(
-        random_bytes(5)
+        random_bytes(6)
     );
 
 
+/* ================================================================
+   TEMP SIGNATURE
+   ================================================================ */
+
 $tempSignature =
-    $tempDirectory .
+    $signedTempDirectory .
     DIRECTORY_SEPARATOR .
-    'signature_' .
+    "signature_" .
     $uniqueId .
-    '.png';
+    ".png";
 
 
-$workingPdf =
-    $tempDirectory .
-    DIRECTORY_SEPARATOR .
-    'document_' .
-    $uniqueId .
-    '.pdf';
-
-
-$convertedPdf =
-    $tempDirectory .
-    DIRECTORY_SEPARATOR .
-    pathinfo(
-        $originalFile,
-        PATHINFO_FILENAME
-    ) .
-    '.pdf';
-
-
-/**
- * Save signature image.
- */
 if (
     file_put_contents(
         $tempSignature,
@@ -476,320 +787,49 @@ if (
     ) === false
 ) {
 
-    jsonResponse(
+    signResponse(
         false,
-        'Unable to save the signature image.'
+        "Unable to save the signature temporarily.",
+        [],
+        500
     );
-
 }
 
 
-/**
- * Make sure the saved file is actually a PNG.
- */
-$imageInfo = @getimagesize(
-    $tempSignature
-);
+/* ================================================================
+   CLEANUP HELPER
+   ================================================================ */
 
+function removeSignConversionDirectory(
+    string $directory
+): void {
 
-if (
-    $imageInfo === false ||
-    ($imageInfo['mime'] ?? '') !== 'image/png'
-) {
-
-    @unlink($tempSignature);
-
-    jsonResponse(
-        false,
-        'The signature image is not a valid PNG file.'
-    );
-
-}
-
-
-/**
- * PDF source preparation.
- */
-if ($extension === 'pdf') {
-
-    /**
-     * Original is already PDF.
-     *
-     * Copy it to the working location so
-     * the original remains untouched.
-     */
     if (
-        !copy(
-            $originalFile,
-            $workingPdf
-        )
+        !is_dir($directory)
     ) {
-
-        @unlink($tempSignature);
-
-        jsonResponse(
-            false,
-            'Unable to prepare the PDF for signing.'
-        );
-
-    }
-
-} else {
-
-    /**
-     * DOC/DOCX conversion.
-     *
-     * LibreOffice is used in headless mode.
-     */
-    $sofficeCandidates = [
-
-        'C:\\Program Files\\LibreOffice\\program\\soffice.com',
-
-        'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
-
-        'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com',
-
-        'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe'
-
-    ];
-
-
-    $soffice = null;
-
-
-    foreach ($sofficeCandidates as $candidate) {
-
-        if (
-            file_exists($candidate)
-        ) {
-
-            $soffice = $candidate;
-
-            break;
-
-        }
-
+        return;
     }
 
 
-    /**
-     * Final fallback.
-     */
-    if ($soffice === null) {
+    try {
 
-        $soffice = 'soffice.com';
-
-    }
-
-
-    /**
-     * Unique LibreOffice profile.
-     *
-     * This prevents conflicts when multiple
-     * conversions happen.
-     */
-    $loProfile =
-        $tempDirectory .
-        DIRECTORY_SEPARATOR .
-        'lo_profile_' .
-        $uniqueId;
-
-
-    if (!mkdir(
-        $loProfile,
-        0775,
-        true
-    )) {
-
-        @unlink($tempSignature);
-
-        jsonResponse(
-            false,
-            'Unable to create LibreOffice temporary profile.'
-        );
-
-    }
-
-
-    /**
-     * Escape Windows shell arguments.
-     */
-    $sofficeArg =
-        escapeshellarg(
-            $soffice
-        );
-
-    $inputArg =
-        escapeshellarg(
-            $originalFile
-        );
-
-    $outputArg =
-        escapeshellarg(
-            $tempDirectory
-        );
-
-    $profileArg =
-        escapeshellarg(
-            'file:///' .
-            str_replace(
-                '\\',
-                '/',
-                $loProfile
-            )
-        );
-
-
-    /**
-     * Convert to PDF.
-     */
-    $command =
-        $sofficeArg .
-        ' --headless' .
-        ' --convert-to pdf' .
-        ' --outdir ' .
-        $outputArg .
-        ' -env:UserInstallation=' .
-        $profileArg .
-        ' ' .
-        $inputArg .
-        ' 2>&1';
-
-
-    $output = [];
-
-    $returnCode = 0;
-
-
-    exec(
-        $command,
-        $output,
-        $returnCode
-    );
-
-
-    /**
-     * LibreOffice creates the PDF using
-     * the original filename.
-     */
-    $expectedConvertedPdf =
-        $tempDirectory .
-        DIRECTORY_SEPARATOR .
-        pathinfo(
-            $originalFile,
-            PATHINFO_FILENAME
-        ) .
-        '.pdf';
-
-
-    /**
-     * Check conversion result.
-     */
-    if (
-        $returnCode !== 0 ||
-        !file_exists($expectedConvertedPdf)
-    ) {
-
-        @unlink($tempSignature);
-
-        /**
-         * Remove LibreOffice profile.
-         */
-        if (is_dir($loProfile)) {
-
-            $profileFiles = new RecursiveIteratorIterator(
+        $iterator =
+            new RecursiveIteratorIterator(
                 new RecursiveDirectoryIterator(
-                    $loProfile,
+                    $directory,
                     FilesystemIterator::SKIP_DOTS
                 ),
                 RecursiveIteratorIterator::CHILD_FIRST
             );
 
-            foreach ($profileFiles as $file) {
 
-                if ($file->isDir()) {
+        foreach (
+            $iterator as $file
+        ) {
 
-                    @rmdir(
-                        $file->getRealPath()
-                    );
-
-                } else {
-
-                    @unlink(
-                        $file->getRealPath()
-                    );
-
-                }
-
-            }
-
-            @rmdir(
-                $loProfile
-            );
-
-        }
-
-
-        $details = '';
-
-        if (!empty($output)) {
-
-            $details =
-                ' LibreOffice: ' .
-                implode(
-                    ' ',
-                    $output
-                );
-
-        }
-
-
-        jsonResponse(
-            false,
-            'LibreOffice could not convert the document to PDF.' .
-            $details
-        );
-
-    }
-
-
-    /**
-     * Move converted PDF to our predictable
-     * working filename.
-     */
-    if (
-        !rename(
-            $expectedConvertedPdf,
-            $workingPdf
-        )
-    ) {
-
-        @unlink($tempSignature);
-
-        jsonResponse(
-            false,
-            'Unable to prepare the converted PDF.'
-        );
-
-    }
-
-
-    /**
-     * Clean LibreOffice profile.
-     */
-    if (is_dir($loProfile)) {
-
-        $profileFiles = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator(
-                $loProfile,
-                FilesystemIterator::SKIP_DOTS
-            ),
-            RecursiveIteratorIterator::CHILD_FIRST
-        );
-
-        foreach ($profileFiles as $file) {
-
-            if ($file->isDir()) {
+            if (
+                $file->isDir()
+            ) {
 
                 @rmdir(
                     $file->getRealPath()
@@ -800,154 +840,583 @@ if ($extension === 'pdf') {
                 @unlink(
                     $file->getRealPath()
                 );
-
             }
-
         }
 
-        @rmdir(
-            $loProfile
-        );
+    } catch (Throwable $e) {
 
+        // Ignore cleanup failures.
     }
 
+
+    @rmdir(
+        $directory
+    );
 }
 
 
-/**
- * Verify the working PDF.
- */
+/* ================================================================
+   WORKING PDF
+   ================================================================ */
+
+$workingPdf = "";
+
+
+/* ================================================================
+   PDF
+   ================================================================ */
+
 if (
-    !file_exists($workingPdf) ||
-    filesize($workingPdf) <= 0
+    $extension === "pdf"
 ) {
 
-    @unlink($tempSignature);
-    @unlink($workingPdf);
+    $workingPdf =
+        $signedTempDirectory .
+        DIRECTORY_SEPARATOR .
+        "source_" .
+        $uniqueId .
+        ".pdf";
 
-    jsonResponse(
-        false,
-        'The PDF could not be prepared for signing.'
+
+    if (
+        !copy(
+            $originalFile,
+            $workingPdf
+        )
+    ) {
+
+        @unlink(
+            $tempSignature
+        );
+
+        signResponse(
+            false,
+            "Unable to prepare the PDF for signing.",
+            [],
+            500
+        );
+    }
+}
+
+
+/* ================================================================
+   DOC / DOCX
+   ================================================================ */
+
+if (
+    $extension === "doc" ||
+    $extension === "docx"
+) {
+
+    $fileSize =
+        filesize(
+            $originalFile
+        );
+
+
+    $fileModified =
+        filemtime(
+            $originalFile
+        );
+
+
+    if (
+        $fileSize === false ||
+        $fileModified === false
+    ) {
+
+        @unlink(
+            $tempSignature
+        );
+
+        signResponse(
+            false,
+            "Unable to read document file information.",
+            [],
+            500
+        );
+    }
+
+
+    /* ------------------------------------------------------------
+       PREVIEW CACHE
+    ------------------------------------------------------------ */
+
+    $cacheDirectory =
+        $documentsDirectory .
+        DIRECTORY_SEPARATOR .
+        "preview_cache";
+
+
+    if (
+        !is_dir($cacheDirectory)
+    ) {
+
+        if (
+            !mkdir(
+                $cacheDirectory,
+                0775,
+                true
+            )
+        ) {
+
+            @unlink(
+                $tempSignature
+            );
+
+            signResponse(
+                false,
+                "Unable to create PDF preview cache directory.",
+                [],
+                500
+            );
+        }
+    }
+
+
+    /* ------------------------------------------------------------
+       CACHE KEY
+    ------------------------------------------------------------ */
+
+    $cacheKey =
+        hash(
+            "sha256",
+            $documentId .
+            "|" .
+            $originalFile .
+            "|" .
+            $fileSize .
+            "|" .
+            $fileModified
+        );
+
+
+    $cachedPdf =
+        $cacheDirectory .
+        DIRECTORY_SEPARATOR .
+        "document_" .
+        $documentId .
+        "_" .
+        $cacheKey .
+        ".pdf";
+
+
+    /* ------------------------------------------------------------
+       CREATE CACHE IF NECESSARY
+    ------------------------------------------------------------ */
+
+    if (
+        !file_exists($cachedPdf) ||
+        filesize($cachedPdf) <= 0
+    ) {
+
+        $conversionId =
+            date("Ymd_His") .
+            "_" .
+            bin2hex(
+                random_bytes(6)
+            );
+
+
+        $conversionDirectory =
+            $cacheDirectory .
+            DIRECTORY_SEPARATOR .
+            "conversion_" .
+            $conversionId;
+
+
+        $loProfile =
+            $conversionDirectory .
+            DIRECTORY_SEPARATOR .
+            "lo_profile";
+
+
+        if (
+            !mkdir(
+                $loProfile,
+                0775,
+                true
+            )
+        ) {
+
+            @unlink(
+                $tempSignature
+            );
+
+            signResponse(
+                false,
+                "Unable to create LibreOffice temporary profile.",
+                [],
+                500
+            );
+        }
+
+
+        /* --------------------------------------------------------
+           LIBREOFFICE
+        -------------------------------------------------------- */
+
+        $sofficeCandidates = [
+
+            "C:\\Program Files\\LibreOffice\\program\\soffice.com",
+
+            "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
+
+            "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com",
+
+            "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe"
+        ];
+
+
+        $soffice = null;
+
+
+        foreach (
+            $sofficeCandidates as $candidate
+        ) {
+
+            if (
+                file_exists($candidate)
+            ) {
+
+                $soffice =
+                    $candidate;
+
+                break;
+            }
+        }
+
+
+        if (
+            $soffice === null
+        ) {
+
+            $soffice =
+                "soffice.com";
+        }
+
+
+        $sofficeArg =
+            escapeshellarg(
+                $soffice
+            );
+
+
+        $inputArg =
+            escapeshellarg(
+                $originalFile
+            );
+
+
+        $outputArg =
+            escapeshellarg(
+                $conversionDirectory
+            );
+
+
+        $profileUrl =
+            "file:///" .
+            str_replace(
+                "\\",
+                "/",
+                $loProfile
+            );
+
+
+        $profileArg =
+            escapeshellarg(
+                $profileUrl
+            );
+
+
+        $command =
+            $sofficeArg .
+            " --headless" .
+            " --convert-to pdf" .
+            " --outdir " .
+            $outputArg .
+            " -env:UserInstallation=" .
+            $profileArg .
+            " " .
+            $inputArg .
+            " 2>&1";
+
+
+        $output = [];
+
+        $returnCode = 0;
+
+
+        exec(
+            $command,
+            $output,
+            $returnCode
+        );
+
+
+        $convertedPdf =
+            $conversionDirectory .
+            DIRECTORY_SEPARATOR .
+            pathinfo(
+                $originalFile,
+                PATHINFO_FILENAME
+            ) .
+            ".pdf";
+
+
+        if (
+            $returnCode !== 0 ||
+            !file_exists($convertedPdf)
+        ) {
+
+            @unlink(
+                $tempSignature
+            );
+
+
+            $details = "";
+
+
+            if (
+                !empty($output)
+            ) {
+
+                $details =
+                    " " .
+                    implode(
+                        " ",
+                        $output
+                    );
+            }
+
+
+            removeSignConversionDirectory(
+                $conversionDirectory
+            );
+
+
+            signResponse(
+                false,
+                "LibreOffice could not convert the document to PDF." .
+                $details,
+                [],
+                500
+            );
+        }
+
+
+        if (
+            file_exists($cachedPdf)
+        ) {
+
+            @unlink(
+                $cachedPdf
+            );
+        }
+
+
+        if (
+            !rename(
+                $convertedPdf,
+                $cachedPdf
+            )
+        ) {
+
+            if (
+                !copy(
+                    $convertedPdf,
+                    $cachedPdf
+                )
+            ) {
+
+                @unlink(
+                    $tempSignature
+                );
+
+
+                removeSignConversionDirectory(
+                    $conversionDirectory
+                );
+
+
+                signResponse(
+                    false,
+                    "Unable to save the converted PDF.",
+                    [],
+                    500
+                );
+            }
+
+
+            @unlink(
+                $convertedPdf
+            );
+        }
+
+
+        removeSignConversionDirectory(
+            $conversionDirectory
+        );
+    }
+
+
+    /* ------------------------------------------------------------
+       VERIFY CACHE
+    ------------------------------------------------------------ */
+
+    if (
+        !file_exists($cachedPdf) ||
+        filesize($cachedPdf) <= 0
+    ) {
+
+        @unlink(
+            $tempSignature
+        );
+
+        signResponse(
+            false,
+            "The converted PDF could not be prepared.",
+            [],
+            500
+        );
+    }
+
+
+    /* ------------------------------------------------------------
+       COPY CACHE TO WORKSPACE
+    ------------------------------------------------------------ */
+
+    $workingPdf =
+        $signedTempDirectory .
+        DIRECTORY_SEPARATOR .
+        "source_" .
+        $uniqueId .
+        ".pdf";
+
+
+    if (
+        !copy(
+            $cachedPdf,
+            $workingPdf
+        )
+    ) {
+
+        @unlink(
+            $tempSignature
+        );
+
+        signResponse(
+            false,
+            "Unable to prepare the converted PDF for signing.",
+            [],
+            500
+        );
+    }
+}
+
+
+/* ================================================================
+   VERIFY WORKING PDF
+   ================================================================ */
+
+if (
+    !file_exists($workingPdf) ||
+    !is_readable($workingPdf)
+) {
+
+    @unlink(
+        $tempSignature
     );
 
+    signResponse(
+        false,
+        "The PDF prepared for signing could not be found.",
+        [],
+        500
+    );
 }
 
 
-/**
- * Load Composer.
- */
-$autoload = $projectRoot .
-    DIRECTORY_SEPARATOR .
-    'vendor' .
-    DIRECTORY_SEPARATOR .
-    'autoload.php';
+/* ================================================================
+   FINAL FILE
+   ================================================================ */
 
-
-if (!file_exists($autoload)) {
-
-    @unlink($tempSignature);
-    @unlink($workingPdf);
-
-    jsonResponse(
-        false,
-        'Composer autoload file was not found.'
+$baseName =
+    pathinfo(
+        $originalFile,
+        PATHINFO_FILENAME
     );
 
-}
 
-
-require_once $autoload;
-
-
-/**
- * Load FPDI.
- */
-use setasign\Fpdi\Fpdi;
-
-
-/**
- * Generate output filename.
- */
-$title = $document['title'] ?? 'document';
-
-
-/**
- * Clean title for use in filename.
- */
-$safeTitle = preg_replace(
-    '/[^A-Za-z0-9_-]+/',
-    '_',
-    $title
-);
-
-
-$safeTitle = trim(
-    $safeTitle,
-    '_'
-);
-
-
-if ($safeTitle === '') {
-
-    $safeTitle = 'document';
-
-}
-
-
-$outputFileName =
-    $safeTitle .
-    '_signed_' .
-    date('Ymd_His') .
-    '_' .
+$finalFileName =
+    $baseName .
+    "_signed_" .
+    date("Ymd_His") .
+    "_" .
     bin2hex(
         random_bytes(3)
     ) .
-    '.pdf';
+    ".pdf";
 
 
-$outputFile =
+$finalFile =
     $documentsDirectory .
     DIRECTORY_SEPARATOR .
-    $outputFileName;
+    $finalFileName;
 
 
-/**
- * Relative path stored in database.
- */
 $reviewedFile =
-    'uploads/documents/' .
-    $outputFileName;
+    "uploads/documents/" .
+    $finalFileName;
 
 
-/**
- * Create signed PDF.
- */
+/* ================================================================
+   GENERATE PDF
+   ================================================================ */
+
 try {
 
-    $pdf = new Fpdi();
-
-
-    /**
-     * Determine number of pages.
+    /*
+     * IMPORTANT:
+     *
+     * "pt" means PDF points.
+     *
+     * 72 points = 1 inch.
+     *
+     * This makes the coordinates received
+     * from PDF.js directly usable by FPDF.
      */
+    $pdf =
+        new Fpdi(
+            "P",
+            "pt"
+        );
+
+
+    /* ------------------------------------------------------------
+       IMPORT SOURCE
+    ------------------------------------------------------------ */
+
     $pageCount =
         $pdf->setSourceFile(
             $workingPdf
         );
 
 
-    if ($pageCount < 1) {
+    if (
+        $pageCount < 1
+    ) {
 
-        throw new Exception(
-            'The PDF contains no pages.'
+        throw new RuntimeException(
+            "The source PDF contains no pages."
         );
-
     }
 
 
-    /**
-     * Import every page.
-     */
+    /* ------------------------------------------------------------
+       PROCESS PAGES
+    ------------------------------------------------------------ */
+
     for (
         $pageNo = 1;
         $pageNo <= $pageCount;
@@ -966,233 +1435,325 @@ try {
             );
 
 
-        /**
-         * Determine orientation.
-         */
-        $orientation =
-            ($size['width'] > $size['height'])
-            ? 'L'
-            : 'P';
+        if (
+            !is_array($size)
+        ) {
 
+            throw new RuntimeException(
+                "Unable to determine PDF page dimensions."
+            );
+        }
+
+
+        /*
+         * Because FPDF is using "pt",
+         * these are PDF points.
+         */
+        $pageWidth =
+            (float)$size["width"];
+
+
+        $pageHeight =
+            (float)$size["height"];
+
+
+        $orientation =
+            $pageWidth >
+            $pageHeight
+                ? "L"
+                : "P";
+
+
+        /* --------------------------------------------------------
+           ADD EXACT PAGE SIZE
+        -------------------------------------------------------- */
 
         $pdf->AddPage(
             $orientation,
             [
-                $size['width'],
-                $size['height']
+                $pageWidth,
+                $pageHeight
             ]
         );
 
 
+        /* --------------------------------------------------------
+           ORIGINAL PAGE
+        -------------------------------------------------------- */
+
         $pdf->useTemplate(
-            $templateId
+            $templateId,
+            0,
+            0,
+            $pageWidth,
+            $pageHeight
         );
 
 
-        /**
-         * Add signature only to the final page.
-         */
-        if ($pageNo === $pageCount) {
+        /* --------------------------------------------------------
+           SIGNATURES ON THIS PAGE
+        -------------------------------------------------------- */
 
-            /**
-             * Signature dimensions in mm.
+        foreach (
+            $validatedPlacements
+            as $placement
+        ) {
+
+            if (
+                (int)$placement["page"] !==
+                $pageNo
+            ) {
+                continue;
+            }
+
+
+            /*
+             * Coordinates from the browser:
+             *
+             * x = left
+             * y = bottom
+             *
+             * FPDI/FPDF:
+             *
+             * x = left
+             * y = top
+             *
+             * Therefore:
+             *
+             * topY =
+             *     pageHeight -
+             *     y -
+             *     height
              */
-            $signatureWidth = 45;
-            $signatureHeight = 18;
+            $signatureX =
+                (float)$placement["x"];
 
 
-            /**
-             * Position:
-             * bottom-right of final page.
-             */
-            $rightMargin = 20;
-            $bottomMargin = 25;
+            $signatureBottomY =
+                (float)$placement["y"];
 
 
-            $x =
-                $size['width'] -
-                $signatureWidth -
-                $rightMargin;
+            $signatureWidth =
+                (float)$placement["width"];
 
 
-            $y =
-                $size['height'] -
-                $signatureHeight -
-                $bottomMargin;
+            $signatureHeight =
+                (float)$placement["height"];
 
 
-            /**
-             * Signature image.
-             */
+            $signatureY =
+                $pageHeight -
+                $signatureBottomY -
+                $signatureHeight;
+
+
+            /* ----------------------------------------------------
+               SAFETY BOUNDARIES
+            ---------------------------------------------------- */
+
+            $signatureX =
+                max(
+                    0,
+                    min(
+                        $signatureX,
+                        $pageWidth -
+                        $signatureWidth
+                    )
+                );
+
+
+            $signatureY =
+                max(
+                    0,
+                    min(
+                        $signatureY,
+                        $pageHeight -
+                        $signatureHeight
+                    )
+                );
+
+
+            /* ----------------------------------------------------
+               SIGNATURE
+            ---------------------------------------------------- */
+
             $pdf->Image(
                 $tempSignature,
-                $x,
-                $y,
+                $signatureX,
+                $signatureY,
                 $signatureWidth,
                 $signatureHeight,
-                'PNG'
+                "PNG"
             );
-
-
-            /**
-             * Small label beneath signature.
-             */
-            $pdf->SetFont(
-                'Arial',
-                '',
-                7
-            );
-
-
-            $pdf->SetTextColor(
-                80,
-                80,
-                80
-            );
-
-
-            $pdf->SetXY(
-                $x,
-                $y + $signatureHeight + 1
-            );
-
-
-            $pdf->Cell(
-                $signatureWidth,
-                4,
-                'Digitally signed',
-                0,
-                0,
-                'C'
-            );
-
         }
-
     }
 
 
-    /**
-     * Write final signed PDF.
-     */
+    /* ============================================================
+       WRITE FILE
+       ============================================================ */
+
     $pdf->Output(
-        'F',
-        $outputFile
+        "F",
+        $finalFile
     );
 
-
-} catch (Throwable $e) {
-
-    @unlink($tempSignature);
-    @unlink($workingPdf);
-
-    jsonResponse(
-        false,
-        'Unable to create the signed PDF: ' .
-        $e->getMessage()
-    );
-
-}
-
-
-/**
- * Verify output was actually created.
- */
-if (
-    !file_exists($outputFile) ||
-    filesize($outputFile) <= 0
+} catch (
+    Throwable $e
 ) {
 
-    @unlink($tempSignature);
-    @unlink($workingPdf);
-
-    jsonResponse(
-        false,
-        'The signed PDF was not created.'
+    @unlink(
+        $tempSignature
     );
 
+    @unlink(
+        $workingPdf
+    );
+
+    @unlink(
+        $finalFile
+    );
+
+
+    signResponse(
+        false,
+        "Unable to generate the signed PDF: " .
+        $e->getMessage(),
+        [],
+        500
+    );
 }
 
 
-/**
- * Update document record.
- *
- * IMPORTANT:
- * Your project's updateData() function accepts:
- *
- * updateData($table, $data, $where)
- *
- * where must be an associative array.
- */
-$updateResult = updateData(
-    'documents',
-    [
-        'reviewed_file' => $reviewedFile,
-        'reviewed_by'   => (int)$user['id'],
-        'reviewed_at'   => date('Y-m-d H:i:s')
-    ],
-    [
-        'id' => $documentId
-    ]
+/* ================================================================
+   VERIFY FINAL PDF
+   ================================================================ */
+
+if (
+    !file_exists($finalFile) ||
+    filesize($finalFile) <= 0
+) {
+
+    @unlink(
+        $tempSignature
+    );
+
+    @unlink(
+        $workingPdf
+    );
+
+
+    signResponse(
+        false,
+        "The signed PDF could not be generated.",
+        [],
+        500
+    );
+}
+
+
+/* ================================================================
+   UPDATE DATABASE
+   ================================================================ */
+
+try {
+
+    $updated =
+        updateData(
+            "documents",
+            [
+                "reviewed_file" =>
+                    $reviewedFile,
+
+                "reviewed_by" =>
+                    (int)$user["id"],
+
+                "reviewed_at" =>
+                    date(
+                        "Y-m-d H:i:s"
+                    )
+            ],
+            [
+                "id" =>
+                    $documentId
+            ]
+        );
+
+
+    if (!$updated) {
+
+        @unlink(
+            $finalFile
+        );
+
+        @unlink(
+            $tempSignature
+        );
+
+        @unlink(
+            $workingPdf
+        );
+
+
+        signResponse(
+            false,
+            "The signed PDF was generated, but the document record could not be updated.",
+            [],
+            500
+        );
+    }
+
+} catch (
+    Throwable $e
+) {
+
+    @unlink(
+        $finalFile
+    );
+
+    @unlink(
+        $tempSignature
+    );
+
+    @unlink(
+        $workingPdf
+    );
+
+
+    signResponse(
+        false,
+        "The signed PDF was generated, but saving the document record failed.",
+        [],
+        500
+    );
+}
+
+
+/* ================================================================
+   CLEANUP
+   ================================================================ */
+
+@unlink(
+    $tempSignature
+);
+
+@unlink(
+    $workingPdf
 );
 
 
-/**
- * Make sure database update succeeded.
- */
-if (
-    !isset($updateResult['success']) ||
-    !$updateResult['success']
-) {
+/* ================================================================
+   SUCCESS
+   ================================================================ */
 
-    /**
-     * The signed file was created, but the database
-     * could not be updated. Remove the orphaned file.
-     */
-    @unlink($outputFile);
-
-    @unlink($tempSignature);
-    @unlink($workingPdf);
-
-    jsonResponse(
-        false,
-        'The signed PDF was created, but the document record could not be updated.',
-        [
-            'database_error' =>
-                $updateResult['error'] ?? 'Unknown database error'
-        ]
-    );
-
-}
-
-
-/**
- * Cleanup temporary files.
- */
-@unlink($tempSignature);
-@unlink($workingPdf);
-
-
-/**
- * Browser URL.
- */
-$reviewedUrl =
-    '/Communication/' .
-    str_replace(
-        '\\',
-        '/',
-        $reviewedFile
-    );
-
-
-/**
- * Success.
- */
-jsonResponse(
+signResponse(
     true,
-    'Signed document generated successfully.',
+    "Signed PDF generated successfully.",
     [
-        'reviewed_file' => $reviewedFile,
-        'reviewed_url'  => $reviewedUrl
+        "reviewed_file" =>
+            $reviewedFile,
+
+        "reviewed_url" =>
+            $reviewedFile
     ]
 );
-
