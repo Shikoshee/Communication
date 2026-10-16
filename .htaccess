@@ -1,0 +1,18 @@
+
+<IfModule mod_headers.c>
+
+    # ONLYOFFICE Docs Cloud origin
+    SetEnvIf Origin "^https://3945754a\.docs\.onlyoffice\.com$" ALLOW_CORS_ORIGIN=$0
+
+    # Communication System tunnel origin
+    SetEnvIf Origin "^https://couples-informational-dsc-laboratories.trycloudflare.com$" ALLOW_CORS_ORIGIN=$0
+
+    # CORS response headers
+    Header always set Access-Control-Allow-Origin "%{ALLOW_CORS_ORIGIN}e" env=ALLOW_CORS_ORIGIN
+    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS" env=ALLOW_CORS_ORIGIN
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept" env=ALLOW_CORS_ORIGIN
+    Header always set Access-Control-Allow-Credentials "true" env=ALLOW_CORS_ORIGIN
+    Header always merge Vary Origin
+
+</IfModule>
+

@@ -2,13 +2,17 @@
 
 require_once "includes/config.php";
 require_once "includes/auth.php";
-require_once __DIR__ . '/includes/ApprovalRouter.php';
+require_once __DIR__ . "/includes/ApprovalRouter.php";
 
 Auth::protect();
 
 $user = Auth::getCurrentUser();
 
-$id = (int)($_GET['id'] ?? 0);
+$id = (int)($_GET["id"] ?? 0);
+
+if ($id <= 0) {
+    die("Invalid document ID");
+}
 
 
 /*
@@ -17,28 +21,18 @@ $id = (int)($_GET['id'] ?? 0);
 |--------------------------------------------------------------------------
 */
 
-$document = fetchRow("
-
-SELECT
-
-d.*,
-
-CONCAT(
-u.first_name,
-' ',
-u.last_name
-) AS uploader
-
-FROM documents d
-
-LEFT JOIN users u
-
-ON u.id = d.uploaded_by
-
-WHERE d.id = ?
-
-", [$id]);
-
+$document = fetchRow(
+    "
+    SELECT
+        d.*,
+        CONCAT(u.first_name, ' ', u.last_name) AS uploader
+    FROM documents d
+    LEFT JOIN users u
+        ON u.id = d.uploaded_by
+    WHERE d.id = ?
+    ",
+    [$id]
+);
 
 if (!$document) {
     die("Document not found");
@@ -51,10 +45,69 @@ if (!$document) {
 |--------------------------------------------------------------------------
 */
 
-if (!ApprovalRouter::canUserApproveDocument($user['id'], $id)) {
+if (!ApprovalRouter::canUserApproveDocument($user["id"], $id)) {
     die("You do not have permission to approve this document");
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| File information
+|--------------------------------------------------------------------------
+*/
+
+$filePath = trim(
+    $document["file_path"] ?? ""
+);
+
+$fileExtension = strtolower(
+    pathinfo(
+        parse_url(
+            $filePath,
+            PHP_URL_PATH
+        ),
+        PATHINFO_EXTENSION
+    )
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| ONLYOFFICE editor URL
+|--------------------------------------------------------------------------
+*/
+
+$editorUrl =
+    rtrim(APP_URL, "/") .
+    "/document-editor.php?id=" .
+    (int)$document["id"];
+
+
+/*
+|--------------------------------------------------------------------------
+| Signed copy URL
+|--------------------------------------------------------------------------
+*/
+
+$signedCopyUrl = "";
+
+if (!empty($document["reviewed_file"])) {
+
+    $signedCopyUrl =
+        rtrim(APP_URL, "/") .
+        "/" .
+        ltrim(
+            $document["reviewed_file"],
+            "/"
+        );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Page
+|--------------------------------------------------------------------------
+*/
 
 include "includes/header.php";
 include "includes/sidebar.php";
@@ -62,15 +115,716 @@ include "includes/navbar.php";
 
 ?>
 
-<link rel="stylesheet" href="assets/css/review.css">
+
+<link
+    rel="stylesheet"
+    href="assets/css/review.css"
+>
+
 
 <style>
 
-/*
+
+/* ================================================================
+   ONLYOFFICE EDITOR LAUNCH
+   ================================================================ */
+
+.onlyoffice-editor-launch {
+    margin: 18px 0;
+    padding: 18px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #eff6ff;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+
+    flex-wrap: wrap;
+}
+
+.onlyoffice-editor-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.onlyoffice-editor-icon {
+    width: 46px;
+    height: 46px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 9px;
+
+    background: #2563eb;
+    color: #fff;
+
+    font-size: 20px;
+
+    flex-shrink: 0;
+}
+
+.onlyoffice-editor-info strong {
+    display: block;
+
+    color: #1e3a8a;
+
+    font-size: 16px;
+
+    margin-bottom: 4px;
+}
+
+.onlyoffice-editor-info p {
+    margin: 0;
+
+    color: #475569;
+
+    font-size: 13px;
+
+    line-height: 1.5;
+}
+
+.open-editor-btn {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 9px;
+
+    padding: 11px 18px;
+
+    border-radius: 7px;
+
+    background: #2563eb;
+    color: #fff;
+
+    text-decoration: none;
+
+    font-size: 14px;
+    font-weight: 600;
+
+    white-space: nowrap;
+
+    transition: background .2s ease,
+                transform .1s ease;
+}
+
+.open-editor-btn:hover {
+    background: #1d4ed8;
+    color: #fff;
+    text-decoration: none;
+}
+
+.open-editor-btn:active {
+    transform: translateY(1px);
+}
+
+@media (max-width: 768px) {
+
+    .onlyoffice-editor-launch {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .open-editor-btn {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+}
+    /*
 |--------------------------------------------------------------------------
-| Digital Signature Section
+| AJAX Confirmation Modal
 |--------------------------------------------------------------------------
 */
+
+
+.ajax-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 99999;
+}
+
+.ajax-modal {
+    width: 100%;
+    max-width: 460px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 30px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    animation: ajaxModalIn 0.2s ease;
+}
+
+.ajax-modal-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fee2e2;
+    color: #dc2626;
+    font-size: 24px;
+}
+
+.ajax-modal h3 {
+    margin: 0 0 12px;
+    font-size: 21px;
+    color: #1f2937;
+}
+
+.ajax-modal p {
+    margin: 8px 0;
+    color: #6b7280;
+    line-height: 1.6;
+}
+
+.ajax-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.ajax-modal-actions button {
+    border: none;
+    border-radius: 7px;
+    padding: 11px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.ajax-modal-cancel {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.ajax-modal-cancel:hover {
+    background: #d1d5db;
+}
+
+.ajax-modal-confirm {
+    background: #dc2626;
+    color: #fff;
+}
+
+.ajax-modal-confirm:hover {
+    background: #b91c1c;
+}
+
+.ajax-modal-confirm:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| AJAX Notification
+|--------------------------------------------------------------------------
+*/
+
+.ajax-notification {
+    position: fixed;
+    top: 25px;
+    right: 25px;
+    min-width: 320px;
+    max-width: 450px;
+    padding: 15px 18px;
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 100000;
+    opacity: 0;
+    transform: translateY(-15px);
+    transition: all 0.3s ease;
+}
+
+.ajax-notification.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.ajax-notification.success {
+    border-left: 4px solid #16a34a;
+}
+
+.ajax-notification.success > i {
+    color: #16a34a;
+}
+
+.ajax-notification.error {
+    border-left: 4px solid #dc2626;
+}
+
+.ajax-notification.error > i {
+    color: #dc2626;
+}
+
+.ajax-notification span {
+    flex: 1;
+    color: #374151;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.ajax-notification-close {
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 22px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.ajax-notification-close:hover {
+    color: #374151;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Modal Animation
+|--------------------------------------------------------------------------
+*/
+
+@keyframes ajaxModalIn {
+
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+}
+
+/* ================================================================
+   DIGITAL SIGNATURE PLACEMENT
+   ================================================================ */
+
+   .signed-preview-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.remove-signed-btn {
+    background: #dc2626;
+    color: #fff;
+}
+
+.remove-signed-btn:hover {
+    background: #b91c1c;
+}
+
+.placement-controls {
+    margin-top: 25px;
+}
+
+.placement-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding: 15px;
+    margin-bottom: 15px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+.placement-toolbar strong {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.placement-toolbar small {
+    display: block;
+    color: #64748b;
+}
+
+.placement-toolbar-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* =========================================================
+   PDF SIGNATURE PLACEMENT VIEWER
+   ========================================================= */
+
+.pdf-placement-wrapper {
+    width: 100%;
+}
+
+.pdf-placement-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+
+.pdf-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pdf-zoom-btn {
+    min-width: 38px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #fff;
+    color: #334155;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: .15s ease;
+}
+
+.pdf-zoom-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.pdf-zoom-btn:active {
+    transform: translateY(1px);
+}
+
+.pdf-zoom-value {
+    min-width: 64px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.pdf-viewer-help {
+    font-size: 13px;
+    color: #64748b;
+}
+
+.pdf-placement-viewer {
+    width: 100%;
+    height: 850px;
+    overflow: auto;
+    padding: 24px;
+    background: #e5e7eb;
+    border-radius: 12px;
+    box-sizing: border-box;
+}
+
+/*
+|--------------------------------------------------------------------------
+| PDF pages
+|--------------------------------------------------------------------------
+*/
+
+.pdf-page {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    margin: 0 auto 30px;
+    background: #fff;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .18);
+    overflow: visible;
+    transform-origin: top center;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Canvas
+|--------------------------------------------------------------------------
+*/
+
+.pdf-page canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Signature overlay
+|--------------------------------------------------------------------------
+*/
+
+.pdf-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Page number
+|--------------------------------------------------------------------------
+*/
+
+.placement-page-number {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    z-index: 20;
+    padding: 4px 8px;
+    border-radius: 5px;
+    background: rgba(15, 23, 42, .78);
+    color: #fff;
+    font-size: 11px;
+    pointer-events: none;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Signature placement
+|--------------------------------------------------------------------------
+*/
+
+.signature-placement {
+    position: absolute;
+    box-sizing: border-box;
+
+    border: 2px dashed #2563eb;
+    background: rgba(255, 255, 255, .12);
+
+    cursor: move;
+
+    pointer-events: auto;
+
+    min-width: 55px;
+    min-height: 30px;
+
+    user-select: none;
+    touch-action: none;
+
+    z-index: 10;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Selected signature
+|--------------------------------------------------------------------------
+*/
+
+.signature-placement.selected {
+    border: 2px solid #16a34a;
+
+    box-shadow:
+        0 0 0 2px rgba(22, 163, 74, .18),
+        0 4px 12px rgba(0, 0, 0, .12);
+}
+
+/*
+|--------------------------------------------------------------------------
+| Signature image
+|--------------------------------------------------------------------------
+*/
+
+.signature-placement img {
+    position: absolute;
+
+    left: 0;
+    top: 0;
+
+    width: 100%;
+    height: 100%;
+
+    object-fit: contain;
+
+    pointer-events: none;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Resize handle
+|--------------------------------------------------------------------------
+*/
+
+.signature-resize-handle {
+    position: absolute;
+
+    right: -7px;
+    bottom: -7px;
+
+    width: 14px;
+    height: 14px;
+
+    border-radius: 3px;
+
+    background: #2563eb;
+    border: 2px solid #fff;
+
+    cursor: nwse-resize;
+
+    z-index: 30;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Placement toolbar
+|--------------------------------------------------------------------------
+*/
+
+.signature-placement-toolbar {
+    position: absolute;
+
+    top: -42px;
+    left: 0;
+
+    display: flex;
+    align-items: center;
+
+    gap: 5px;
+
+    padding: 5px;
+
+    background: #0f172a;
+
+    border-radius: 7px;
+
+    white-space: nowrap;
+
+    z-index: 50;
+
+    box-shadow: 0 5px 15px rgba(0, 0, 0, .18);
+
+    pointer-events: auto;
+}
+
+.signature-placement-toolbar select,
+.signature-placement-toolbar button {
+    height: 28px;
+
+    border: 0;
+    border-radius: 5px;
+
+    font-size: 11px;
+}
+
+.signature-placement-toolbar select {
+    padding: 0 5px;
+}
+
+.signature-placement-toolbar button {
+    padding: 0 8px;
+
+    background: #dc2626;
+    color: #fff;
+
+    cursor: pointer;
+}
+
+.signature-placement-toolbar button:hover {
+    background: #b91c1c;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Responsive viewer
+|--------------------------------------------------------------------------
+*/
+
+@media (max-width: 900px) {
+
+    .pdf-placement-viewer {
+        height: 700px;
+        padding: 14px;
+    }
+
+    .pdf-placement-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .pdf-viewer-help {
+        width: 100%;
+    }
+
+}
+
+@media (max-width: 600px) {
+
+    .pdf-placement-viewer {
+        height: 600px;
+        padding: 8px;
+    }
+
+    .pdf-page {
+        margin-bottom: 20px;
+    }
+
+}
+
+.signature-placement-delete {
+    border: none;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    padding: 2px 5px;
+}
+
+.signature-placement-resize {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: #2563eb;
+    cursor: nwse-resize;
+    z-index: 25;
+}
+
+.placement-page-number {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 4px 8px;
+    background: rgba(17,24,39,.75);
+    color: #fff;
+    border-radius: 5px;
+    font-size: 11px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+
+/* ================================================================
+   DIGITAL SIGNATURE SECTION
+   ================================================================ */
 
 .signature-section {
     margin-top: 25px;
@@ -90,11 +844,9 @@ include "includes/navbar.php";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Signature tabs
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   SIGNATURE TABS
+   ================================================================ */
 
 .signature-tabs {
     display: flex;
@@ -118,11 +870,9 @@ include "includes/navbar.php";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Signature panels
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   SIGNATURE PANELS
+   ================================================================ */
 
 .signature-panel {
     display: none;
@@ -133,11 +883,9 @@ include "includes/navbar.php";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Canvas
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   DRAW CANVAS
+   ================================================================ */
 
 .signature-canvas-wrapper {
     width: 100%;
@@ -149,13 +897,14 @@ include "includes/navbar.php";
     width: 100%;
     height: 220px;
     min-height: 220px;
-    background: #ffffff;
+    background: #fff;
     border: 2px dashed #cbd5e1;
     border-radius: 10px;
     cursor: crosshair;
     touch-action: none;
     box-sizing: border-box;
 }
+
 .signature-hint {
     margin-top: 8px;
     font-size: 13px;
@@ -163,11 +912,9 @@ include "includes/navbar.php";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Typed signature
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   TYPED SIGNATURE
+   ================================================================ */
 
 #typedSignature {
     width: 100%;
@@ -198,11 +945,9 @@ include "includes/navbar.php";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Signature controls
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   BUTTONS
+   ================================================================ */
 
 .signature-controls {
     display: flex;
@@ -240,11 +985,9 @@ include "includes/navbar.php";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Signature result
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   RESULT
+   ================================================================ */
 
 .signature-result {
     display: none;
@@ -261,11 +1004,9 @@ include "includes/navbar.php";
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Signature preview
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   APPLIED SIGNATURE
+   ================================================================ */
 
 .applied-signature-preview {
     display: none;
@@ -287,14 +1028,13 @@ include "includes/navbar.php";
 #appliedSignatureImage {
     max-width: 400px;
     max-height: 150px;
+    object-fit: contain;
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Existing signed document
-|--------------------------------------------------------------------------
-*/
+/* ================================================================
+   EXISTING SIGNED DOCUMENT
+   ================================================================ */
 
 .signed-preview {
     margin: 20px 0;
@@ -315,369 +1055,124 @@ include "includes/navbar.php";
     text-decoration: none;
 }
 
+
+/* ================================================================
+   RESPONSIVE
+   ================================================================ */
+
+@media (max-width: 768px) {
+
+    .placement-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .placement-toolbar-actions {
+        width: 100%;
+    }
+
+    .placement-toolbar-actions button {
+        flex: 1;
+    }
+
+    .pdf-placement-viewer {
+        padding: 10px;
+    }
+
+}
+
 </style>
+
+
+
+<!-- ================================================================
+     PAGE HEADER
+     ================================================================ -->
 
 <div class="page-header">
 
-<h1>
-    Review Document
-</h1>
+    <h1>
+        Review Document
+    </h1>
 
-<p>
-    Review, sign and approve submitted documents.
-</p>
+    <p>
+        Review, sign and approve submitted documents.
+    </p>
 
 </div>
+
+
+<!-- ================================================================
+     DOCUMENT CARD
+     ================================================================ -->
 
 <div class="review-card">
 
 
-<!-- ================================================================
-     DOCUMENT HEADER
-     ================================================================ -->
-
-<div class="review-header">
-
-    <div class="document-icon">
-
-        <i class="fa fa-file-signature"></i>
-
-    </div>
-
-    <div class="document-details">
-
-        <h2>
-            <?= htmlspecialchars($document['title']) ?>
-        </h2>
-
-        <div class="document-meta">
-
-            <span>
-                <i class="fa fa-user"></i>
-
-                <?= htmlspecialchars($document['uploader']) ?>
-            </span>
-
-
-            <span>
-
-                <i class="fa fa-calendar"></i>
-
-                <?= date(
-                    "d M Y H:i",
-                    strtotime($document["created_at"])
-                ) ?>
-
-            </span>
-
-
-            <span>
-
-                <i class="fa fa-layer-group"></i>
-
-                Version <?= htmlspecialchars($document["version"]) ?>
-
-            </span>
-
-
-            <span class="status <?= htmlspecialchars($document["status"]) ?>">
-
-                <?= ucfirst(htmlspecialchars($document["status"])) ?>
-
-            </span>
-
-        </div>
-
-    </div>
-
-</div>
-
-
-
-<!-- ================================================================
-     DOCUMENT PREVIEW
-     ================================================================ -->
-
-<div class="preview-card">
-
-    <div class="preview-header">
-
-        <h3>
-
-            <i class="fa fa-eye"></i>
-
-            Document Preview
-
-        </h3>
-
-    </div>
-
-
-    <?php
-
-    $filePath = trim($document['file_path']);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Get file extension
-    |--------------------------------------------------------------------------
-    */
-
-    $fileExtension = strtolower(
-        pathinfo(
-            parse_url($filePath, PHP_URL_PATH),
-            PATHINFO_EXTENSION
-        )
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Build document URL
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-        preg_match('#^https?://#i', $filePath)
-    ) {
-
-        if (
-            str_starts_with(
-                strtolower($filePath),
-                'https://localhost'
-            )
-        ) {
-
-            $relativePath = parse_url(
-                $filePath,
-                PHP_URL_PATH
-            );
-
-            $documentUrl =
-                rtrim(APP_URL, '/') .
-                '/' .
-                ltrim($relativePath, '/');
-
-        } else {
-
-            $documentUrl = $filePath;
-
-        }
-
-    } else {
-
-        $documentUrl =
-            rtrim(APP_URL, '/') .
-            '/' .
-            ltrim($filePath, '/');
-
-    }
-
-
-    $documentUrl = htmlspecialchars(
-        $documentUrl,
-        ENT_QUOTES,
-        'UTF-8'
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Office application
-    |--------------------------------------------------------------------------
-    */
-
-    $wordExtensions = [
-        'pdf',
-        'doc',
-        'docx'
-    ];
-
-    $excelExtensions = [
-        'xls',
-        'xlsx',
-        'csv'
-    ];
-
-
-    $isWord = in_array(
-        $fileExtension,
-        $wordExtensions,
-        true
-    );
-
-    $isExcel = in_array(
-        $fileExtension,
-        $excelExtensions,
-        true
-    );
-
-    ?>
-
-
-    <div class="document-preview">
-
-        <?php if ($isWord): ?>
-
-            <a
-                href="ms-word:ofe|u|<?= $documentUrl ?>"
-                class="open-office-btn word-btn"
-            >
-
-                <i class="fa fa-file-word"></i>
-
-                Open with Microsoft Word
-
-            </a>
-
-
-        <?php elseif ($isExcel): ?>
-
-            <a
-                href="ms-excel:ofe|u|<?= $documentUrl ?>"
-                class="open-office-btn excel-btn"
-            >
-
-                <i class="fa fa-file-excel"></i>
-
-                Open with Microsoft Excel
-
-            </a>
-
-        <?php endif; ?>
-
-    </div>
-
-
-</div>
-
-
-
-<hr>
-
-
-
-<!-- ================================================================
-     EXISTING SIGNED COPY
-     ================================================================ -->
-
-<?php if (!empty($document["reviewed_file"])): ?>
-
-    <div class="signed-preview">
-
-        <div>
-
-            <h4>
-
-                <i class="fa fa-check-circle"></i>
-
-                Signed Copy Already Generated
-
-            </h4>
-
-            <p>
-
-                A reviewed version has already been generated.
-
-            </p>
-
-        </div>
-
-
-        <a
-            href="<?= htmlspecialchars($document["reviewed_file"]) ?>"
-            target="_blank"
-            class="signed-download"
-        >
-
-            <i class="fa fa-download"></i>
-
-            View Signed Copy
-
-        </a>
-
-    </div>
-
-<?php endif; ?>
-
-
-
-<!-- ================================================================
-     DIGITAL SIGNATURE
-     ================================================================ -->
-
-<div class="signature-section">
-
-    <h3>
-
-        <i class="fa fa-signature"></i>
-
-        Digital Signature
-
-    </h3>
-
-
-    <p class="signature-section-description">
-
-        Sign the document electronically before generating the signed copy.
-
-        You can draw your signature or type one.
-
-    </p>
-
-
-
-    <!-- Signature tabs -->
-
-    <div class="signature-tabs">
-
-        <button
-            type="button"
-            class="signature-tab active"
-            data-panel="drawSignaturePanel"
-        >
-
-            <i class="fa fa-pen"></i>
-
-            Draw Signature
-
-        </button>
-
-
-        <button
-            type="button"
-            class="signature-tab"
-            data-panel="typeSignaturePanel"
-        >
-
-            <i class="fa fa-keyboard"></i>
-
-            Type Signature
-
-        </button>
-
-    </div>
-
-
-
     <!-- ============================================================
-         DRAW SIGNATURE
+         DOCUMENT HEADER
          ============================================================ -->
 
-    <div
-        id="drawSignaturePanel"
-        class="signature-panel active"
-    >
+    <div class="review-header">
 
-        <div class="signature-canvas-wrapper">
+        <div class="document-icon">
+            <i class="fa fa-file-signature"></i>
+        </div>
 
-            <canvas id="signatureCanvas"></canvas>
 
-            <div class="signature-hint">
+        <div class="document-details">
 
-                Draw your signature inside the box using your mouse,
-                touch screen or trackpad.
+            <h2>
+                <?= htmlspecialchars(
+                    $document["title"]
+                ) ?>
+            </h2>
+
+
+            <div class="document-meta">
+
+                <span>
+                    <i class="fa fa-user"></i>
+
+                    <?= htmlspecialchars(
+                        $document["uploader"] ?? "Unknown"
+                    ) ?>
+                </span>
+
+
+                <span>
+                    <i class="fa fa-calendar"></i>
+
+                    <?= date(
+                        "d M Y H:i",
+                        strtotime(
+                            $document["created_at"]
+                        )
+                    ) ?>
+                </span>
+
+
+                <span>
+                    <i class="fa fa-layer-group"></i>
+
+                    Version
+                    <?= htmlspecialchars(
+                        $document["version"] ?? "1"
+                    ) ?>
+                </span>
+
+
+                <span
+                    class="status <?= htmlspecialchars(
+                        $document["status"]
+                    ) ?>"
+                >
+                    <?= ucfirst(
+                        htmlspecialchars(
+                            $document["status"]
+                        )
+                    ) ?>
+                </span>
 
             </div>
 
@@ -686,141 +1181,261 @@ include "includes/navbar.php";
     </div>
 
 
-
     <!-- ============================================================
-         TYPE SIGNATURE
+         DOCUMENT PREVIEW / ONLYOFFICE
          ============================================================ -->
 
-    <div
-        id="typeSignaturePanel"
-        class="signature-panel"
-    >
+    <div class="preview-card">
 
-        <input
-            type="text"
-            id="typedSignature"
-            placeholder="Type your name"
-            autocomplete="off"
-        >
+        <div class="preview-header">
+
+            <h3>
+                <i class="fa fa-file-pen"></i>
+                Document Review &amp; Signing
+            </h3>
+
+        </div>
 
 
-        <div
-            id="typedSignaturePreview"
-            class="typed-signature-preview"
-        >
+        <div class="onlyoffice-editor-launch">
 
-            Your signature
+            <div class="onlyoffice-editor-info">
+
+                <div class="onlyoffice-editor-icon">
+                    <i class="fa fa-file-signature"></i>
+                </div>
+
+
+                <div>
+
+                    <strong>
+                        ONLYOFFICE Document Editor
+                    </strong>
+
+                    <p>
+                        Open the document in the browser to review,
+                        edit and add your signature. The signature is
+                        inserted directly into the document before the
+                        signed PDF is generated.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <a
+                href="<?= htmlspecialchars(
+                    $editorUrl,
+                    ENT_QUOTES,
+                    "UTF-8"
+                ) ?>"
+                class="open-editor-btn"
+            >
+
+                <i class="fa fa-pen-to-square"></i>
+
+                Open Document for Signing
+
+                <i class="fa fa-arrow-right"></i>
+
+            </a>
+
+        </div>
+
+
+        <div class="editor-instructions">
+
+            <div class="instruction-item">
+
+                <span class="instruction-number">
+                    1
+                </span>
+
+                <div>
+
+                    <strong>
+                        Open the document
+                    </strong>
+
+                    <p>
+                        Open the document in ONLYOFFICE using the
+                        button above.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="instruction-item">
+
+                <span class="instruction-number">
+                    2
+                </span>
+
+                <div>
+
+                    <strong>
+                        Add your signature
+                    </strong>
+
+                    <p>
+                        Use the Document Signature plugin inside
+                        ONLYOFFICE to draw or type your signature and
+                        insert it directly into the document.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="instruction-item">
+
+                <span class="instruction-number">
+                    3
+                </span>
+
+                <div>
+
+                    <strong>
+                        Generate the signed copy
+                    </strong>
+
+                    <p>
+                        Click <strong>Generate Signed Copy</strong>
+                        in the Document Signature plugin.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="instruction-item">
+
+                <span class="instruction-number">
+                    4
+                </span>
+
+                <div>
+
+                    <strong>
+                        Return here and approve
+                    </strong>
+
+                    <p>
+                        Once the signed PDF has been generated,
+                        return to this page to view it and complete
+                        the approval decision.
+                    </p>
+
+                </div>
+
+            </div>
 
         </div>
 
     </div>
 
 
-
     <!-- ============================================================
-         SIGNATURE CONTROLS
+         EXISTING SIGNED COPY
          ============================================================ -->
 
-    <div class="signature-controls">
+    <?php if (!empty($document["reviewed_file"])): ?>
 
-        <button
-            type="button"
-            id="clearSignature"
-            class="signature-btn clear-signature-btn"
-        >
+        <div class="signed-preview">
 
-            <i class="fa fa-eraser"></i>
+            <div>
 
-            Clear
+                <h4>
 
-        </button>
+                    <i class="fa fa-circle-check"></i>
 
+                    Signed Copy Generated
 
-        <button
-            type="button"
-            id="applySignature"
-            class="signature-btn apply-signature-btn"
-        >
-
-            <i class="fa fa-check"></i>
-
-            Apply Signature
-
-        </button>
+                </h4>
 
 
-        <button
-            type="button"
-            id="generateSignedCopy"
-            class="signature-btn generate-signed-btn"
-            disabled
-        >
+                <p>
 
-            <i class="fa fa-file-signature"></i>
+                    A signed PDF has already been generated for this
+                    document. You can review it before approving.
 
-            Generate Signed Copy
+                </p>
 
-        </button>
-
-    </div>
+            </div>
 
 
+            <div class="signed-preview-actions">
 
-    <!-- ============================================================
-         APPLIED SIGNATURE PREVIEW
-         ============================================================ -->
+                <a
+                    href="<?= htmlspecialchars(
+                        $signedCopyUrl,
+                        ENT_QUOTES,
+                        "UTF-8"
+                    ) ?>"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="signed-download"
+                >
 
-    <div
-        id="appliedSignaturePreview"
-        class="applied-signature-preview"
-    >
+                    <i class="fa fa-file-pdf"></i>
 
-        <h4>
+                    View Signed PDF
 
-            <i class="fa fa-check-circle"></i>
-
-            Signature Applied
-
-        </h4>
-
-
-        <p>
-
-            Your signature is ready to be added to the document.
-
-        </p>
+                </a>
 
 
-        <img
-            id="appliedSignatureImage"
-            src=""
-            alt="Applied signature"
-        >
+                <button
+                    type="button"
+                    id="removeSignedCopy"
+                    class="signature-btn remove-signed-btn"
+                >
 
-    </div>
+                    <i class="fa fa-trash"></i>
+
+                    Remove &amp; Re-sign
+
+                </button>
+
+            </div>
+
+        </div>
+
+    <?php else: ?>
+
+        <div class="signed-preview signed-preview-pending">
+
+            <div>
+
+                <h4>
+
+                    <i class="fa fa-clock"></i>
+
+                    Signed Copy Not Generated
+
+                </h4>
 
 
+                <p>
 
-    <!-- ============================================================
-         STAGE 1 NOTICE
-         ============================================================ -->
+                    Open the document in ONLYOFFICE, add your signature,
+                    and use the Document Signature plugin to generate
+                    the signed PDF.
 
-    <div
-        id="signatureResult"
-        class="signature-result"
-    >
+                </p>
 
-        <strong>Signature ready.</strong>
+            </div>
 
-        The signature has been prepared successfully.
+        </div>
 
-        The actual PDF generation and database update will be connected
-        in the next stage.
+    <?php endif; ?>
 
-    </div>
 
 </div>
-
 
 
 <!-- ================================================================
@@ -833,700 +1448,375 @@ include "includes/navbar.php";
         Approval Decision
     </h3>
 
-    <p>
-        After reviewing and signing, choose the final action.
-    </p>
 
+   <?php if (!empty($document["reviewed_file"])): ?>
+
+    <p>
+        Review the generated signed PDF before making the final
+        approval decision.
+    </p>
 
     <div class="review-actions">
 
         <button
-            onclick="approveDocument(<?= $document['id'] ?>)"
+            type="button"
+            onclick="approveDocument(<?= (int)$document["id"] ?>)"
             class="approve-btn"
-            <?php if (!ApprovalRouter::canUserApproveDocument($user['id'], $id)): ?>
-                disabled
-                title="You don't have permission to approve this document"
-            <?php endif; ?>
         >
-
             <i class="fa fa-check"></i>
-
             Approve Document
-
         </button>
 
-
         <button
-            onclick="rejectDocument(<?= $document['id'] ?>)"
+            type="button"
+            onclick="rejectDocument(<?= (int)$document["id"] ?>)"
             class="reject-btn"
-            <?php if (!ApprovalRouter::canUserApproveDocument($user['id'], $id)): ?>
-                disabled
-                title="You don't have permission to approve this document"
-            <?php endif; ?>
         >
-
             <i class="fa fa-times"></i>
-
             Reject
-
         </button>
 
     </div>
 
+<?php else: ?>
+
+    <p>
+        The document must be signed and a signed PDF generated
+        before it can be approved.
+    </p>
+
+    <div class="review-actions">
+
+        <button
+            type="button"
+            class="approve-btn"
+            disabled
+            title="Generate the signed copy before approving"
+        >
+            <i class="fa fa-lock"></i>
+            Generate Signed Copy First
+        </button>
+
+        <button
+            type="button"
+            onclick="rejectDocument(<?= (int)$document["id"] ?>)"
+            class="reject-btn"
+        >
+            <i class="fa fa-times"></i>
+            Reject
+        </button>
+
+    </div>
+
+<?php endif; ?>
+
 </div>
 
 
-</div>
+<!-- ================================================================
+     JAVASCRIPT
+     ================================================================ -->
 
 <script src="assets/js/review.js"></script>
 
 <script src="assets/js/approvals.js"></script>
 
+
 <script>
+
+/*
+|--------------------------------------------------------------------------
+| Document ID
+|--------------------------------------------------------------------------
+*/
+
+const documentId =
+    <?= (int)$document["id"] ?>;
 
 
 /*
 |--------------------------------------------------------------------------
-| DIGITAL SIGNATURE
+| Remove generated signed copy
+|--------------------------------------------------------------------------
+*/
+/* ==========================================================================
+   AJAX CONFIRMATION MODAL
+   ========================================================================== */
+
+function showAjaxConfirm(message, onConfirm) {
+
+    const overlay = document.createElement("div");
+
+    overlay.className = "ajax-modal-overlay";
+
+    overlay.innerHTML = `
+        <div class="ajax-modal">
+
+            <div class="ajax-modal-icon">
+                <i class="fa fa-trash"></i>
+            </div>
+
+            <h3>Confirm Action</h3>
+
+            <p>${message}</p>
+
+            <div class="ajax-modal-actions">
+
+                <button
+                    type="button"
+                    class="ajax-modal-cancel"
+                    id="ajaxModalCancel"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="button"
+                    class="ajax-modal-confirm"
+                    id="ajaxModalConfirm"
+                >
+                    Confirm
+                </button>
+
+            </div>
+
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const cancelButton =
+        document.getElementById("ajaxModalCancel");
+
+    const confirmButton =
+        document.getElementById("ajaxModalConfirm");
+
+    function closeModal() {
+        overlay.remove();
+    }
+
+    cancelButton.addEventListener("click", function() {
+        closeModal();
+    });
+
+    confirmButton.addEventListener("click", function() {
+
+        confirmButton.disabled = true;
+
+        confirmButton.innerHTML =
+            '<i class="fa fa-spinner fa-spin"></i> Processing...';
+
+        closeModal();
+
+        if (typeof onConfirm === "function") {
+            onConfirm();
+        }
+
+    });
+
+    overlay.addEventListener("click", function(event) {
+
+        if (event.target === overlay) {
+            closeModal();
+        }
+
+    });
+
+}
+
+
+/* ==========================================================================
+   AJAX NOTIFICATION
+   ========================================================================== */
+
+function showAjaxNotification(message, type = "success") {
+
+    const notification =
+        document.createElement("div");
+
+    notification.className =
+        "ajax-notification " + type;
+
+    const icon =
+        type === "success"
+            ? "fa-circle-check"
+            : "fa-circle-exclamation";
+
+    notification.innerHTML = `
+
+        <i class="fa ${icon}"></i>
+
+        <span>
+            ${message}
+        </span>
+
+        <button
+            type="button"
+            class="ajax-notification-close"
+            aria-label="Close"
+        >
+            &times;
+        </button>
+
+    `;
+
+    document.body.appendChild(notification);
+
+    requestAnimationFrame(function() {
+
+        notification.classList.add("show");
+
+    });
+
+    const closeButton =
+        notification.querySelector(
+            ".ajax-notification-close"
+        );
+
+    function removeNotification() {
+
+        notification.classList.remove("show");
+
+        setTimeout(function() {
+
+            notification.remove();
+
+        }, 300);
+
+    }
+
+    closeButton.addEventListener(
+        "click",
+        removeNotification
+    );
+
+    setTimeout(
+        removeNotification,
+        5000
+    );
+
+}
+async function removeSignedCopy() {
+
+    showAjaxConfirm(
+        "Are you sure you want to remove the generated signed copy? " +
+        "You will need to sign the document again.",
+
+        async function() {
+
+            const button =
+                document.getElementById(
+                    "removeSignedCopy"
+                );
+
+            if (button) {
+
+                button.disabled = true;
+
+                button.innerHTML =
+                    '<i class="fa fa-spinner fa-spin"></i> Removing...';
+
+            }
+
+            try {
+
+                const formData =
+                    new FormData();
+
+                formData.append(
+                    "id",
+                    documentId
+                );
+
+                const response =
+                    await fetch(
+                        "api/documents/remove-signed.php",
+                        {
+                            method: "POST",
+                            body: formData,
+                            credentials: "same-origin"
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+                if (!data.success) {
+
+                    throw new Error(
+                        data.message ||
+                        "Unable to remove signed copy."
+                    );
+
+                }
+
+                showAjaxNotification(
+                    data.message ||
+                    "Signed copy removed successfully.",
+                    "success"
+                );
+
+                setTimeout(function() {
+
+                    window.location.reload();
+
+                }, 800);
+
+            } catch (error) {
+
+                console.error(
+                    "Remove signed copy error:",
+                    error
+                );
+
+                showAjaxNotification(
+                    error.message ||
+                    "Unable to remove signed copy.",
+                    "error"
+                );
+
+                if (button) {
+
+                    button.disabled = false;
+
+                    button.innerHTML =
+                        '<i class="fa fa-trash"></i> ' +
+                        'Remove &amp; Re-sign';
+
+                }
+
+            }
+
+        }
+    );
+
+}
+
+/*
+|--------------------------------------------------------------------------
+| Bind remove signed copy button
 |--------------------------------------------------------------------------
 */
 
-document.addEventListener("DOMContentLoaded", function () {
-
-    const canvas = document.getElementById("signatureCanvas");
-    const typedSignature = document.getElementById("typedSignature");
-    const typedSignaturePreview = document.getElementById("typedSignaturePreview");
-
-    const clearButton = document.getElementById("clearSignature");
-    const applyButton = document.getElementById("applySignature");
-    const generateButton = document.getElementById("generateSignedCopy");
-
-    const appliedPreview = document.getElementById("appliedSignaturePreview");
-    const appliedImage = document.getElementById("appliedSignatureImage");
-    const signatureResult = document.getElementById("signatureResult");
-
-    /*
-    |--------------------------------------------------------------------------
-    | CHECK ELEMENTS
-    |--------------------------------------------------------------------------
-    */
-
-    if (!canvas) {
-        console.error("Digital Signature: canvas not found.");
-        return;
-    }
-
-    if (!typedSignature || !typedSignaturePreview ||
-        !clearButton || !applyButton || !generateButton ||
-        !appliedPreview || !appliedImage || !signatureResult) {
-
-        console.error("Digital Signature: one or more elements are missing.");
-        return;
-    }
-
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) {
-        console.error("Digital Signature: unable to get canvas context.");
-        return;
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | VARIABLES
-    |--------------------------------------------------------------------------
-    */
-
-    let drawing = false;
-    let hasDrawing = false;
-    let appliedSignature = null;
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CANVAS SETUP
-    |--------------------------------------------------------------------------
-    */
-
-    function setupCanvas() {
-
-        const rect = canvas.getBoundingClientRect();
-
-        const width = Math.max(
-            Math.floor(rect.width),
-            300
-        );
-
-        const height = 220;
-
-        const ratio = Math.max(
-            window.devicePixelRatio || 1,
-            1
-        );
-
-        canvas.width = width * ratio;
-        canvas.height = height * ratio;
-
-        canvas.style.width = width + "px";
-        canvas.style.height = height + "px";
-
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-        ctx.scale(ratio, ratio);
-
-        ctx.lineWidth = 2.5;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = "#111827";
-
-        ctx.fillStyle = "#ffffff";
-
-        ctx.fillRect(
-            0,
-            0,
-            width,
-            height
-        );
-
-        hasDrawing = false;
-    }
-
-
-    setupCanvas();
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | GET POINTER POSITION
-    |--------------------------------------------------------------------------
-    */
-
-    function getPointerPosition(event) {
-
-        const rect = canvas.getBoundingClientRect();
-
-        return {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top
-        };
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | START DRAWING
-    |--------------------------------------------------------------------------
-    */
-
-    canvas.addEventListener("pointerdown", function (event) {
-
-        event.preventDefault();
-
-        drawing = true;
-        hasDrawing = true;
-
-        try {
-            canvas.setPointerCapture(event.pointerId);
-        } catch (error) {
-            console.warn("Pointer capture unavailable.");
-        }
-
-        const position = getPointerPosition(event);
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            position.x,
-            position.y
-        );
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | DRAW
-    |--------------------------------------------------------------------------
-    */
-
-    canvas.addEventListener("pointermove", function (event) {
-
-        if (!drawing) {
-            return;
-        }
-
-        event.preventDefault();
-
-        const position = getPointerPosition(event);
-
-        ctx.lineTo(
-            position.x,
-            position.y
-        );
-
-        ctx.stroke();
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | STOP DRAWING
-    |--------------------------------------------------------------------------
-    */
-
-    function stopDrawing(event) {
-
-        if (!drawing) {
-            return;
-        }
-
-        drawing = false;
-
-        ctx.closePath();
-
-        if (
-            event &&
-            event.pointerId !== undefined
-        ) {
-
-            try {
-                canvas.releasePointerCapture(
-                    event.pointerId
-                );
-            } catch (error) {
-                // Ignore.
-            }
-        }
-    }
-
-
-    canvas.addEventListener(
-        "pointerup",
-        stopDrawing
-    );
-
-    canvas.addEventListener(
-        "pointercancel",
-        stopDrawing
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | TYPED SIGNATURE
-    |--------------------------------------------------------------------------
-    */
-
-    typedSignature.addEventListener("input", function () {
-
-        const value = typedSignature.value.trim();
-
-        if (!value) {
-
-            typedSignaturePreview.textContent =
-                "Your signature";
-
-            return;
-        }
-
-        typedSignaturePreview.textContent = value;
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | SIGNATURE TABS
-    |--------------------------------------------------------------------------
-    */
-
-    const signatureTabs =
-        document.querySelectorAll(".signature-tab");
-
-    const signaturePanels =
-        document.querySelectorAll(".signature-panel");
-
-
-    signatureTabs.forEach(function (tab) {
-
-        tab.addEventListener("click", function (event) {
-
-            event.preventDefault();
-
-            const targetPanel =
-                tab.dataset.panel;
-
-            signatureTabs.forEach(function (item) {
-
-                item.classList.remove("active");
-
-            });
-
-            signaturePanels.forEach(function (panel) {
-
-                panel.classList.remove("active");
-
-            });
-
-            tab.classList.add("active");
-
-            const panel =
-                document.getElementById(targetPanel);
-
-            if (panel) {
-                panel.classList.add("active");
-            }
-
-        });
-
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CLEAR SIGNATURE
-    |--------------------------------------------------------------------------
-    */
-
-    clearButton.addEventListener("click", function (event) {
-
-        event.preventDefault();
-
-        setupCanvas();
-
-        typedSignature.value = "";
-
-        typedSignaturePreview.textContent =
-            "Your signature";
-
-        appliedSignature = null;
-
-        appliedImage.src = "";
-
-        appliedPreview.classList.remove("show");
-
-        signatureResult.classList.remove("show");
-
-        generateButton.disabled = true;
-
-        generateButton.innerHTML =
-            '<i class="fa fa-file-signature"></i> Generate Signed Copy';
-
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CREATE TYPED SIGNATURE IMAGE
-    |--------------------------------------------------------------------------
-    */
-
-    function createTypedSignature() {
-
-        const value =
-            typedSignature.value.trim();
-
-        if (!value) {
-            return null;
-        }
-
-        const tempCanvas =
-            document.createElement("canvas");
-
-        tempCanvas.width = 1000;
-        tempCanvas.height = 300;
-
-        const tempCtx =
-            tempCanvas.getContext("2d");
-
-        tempCtx.fillStyle = "#ffffff";
-
-        tempCtx.fillRect(
-            0,
-            0,
-            1000,
-            300
-        );
-
-        tempCtx.fillStyle = "#111827";
-
-        tempCtx.font =
-            '72px "Brush Script MT", "Segoe Script", cursive';
-
-        tempCtx.textBaseline = "middle";
-
-        tempCtx.fillText(
-            value,
-            40,
-            150
-        );
-
-        return tempCanvas.toDataURL("image/png");
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | GET CURRENT SIGNATURE
-    |--------------------------------------------------------------------------
-    */
-
-    function getSignatureImage() {
-
-        const activeTab =
-            document.querySelector(".signature-tab.active");
-
-        if (!activeTab) {
-            return null;
-        }
-
-
-        /*
-        | DRAW
-        */
-
-        if (
-            activeTab.dataset.panel ===
-            "drawSignaturePanel"
-        ) {
-
-            if (!hasDrawing) {
-                return null;
-            }
-
-            return canvas.toDataURL("image/png");
-        }
-
-
-        /*
-        | TYPE
-        */
-
-        if (
-            activeTab.dataset.panel ===
-            "typeSignaturePanel"
-        ) {
-
-            return createTypedSignature();
-        }
-
-        return null;
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | APPLY SIGNATURE
-    |--------------------------------------------------------------------------
-    */
-
-    applyButton.addEventListener("click", function (event) {
-
-        event.preventDefault();
-
-        const signature =
-            getSignatureImage();
-
-        if (!signature) {
-
-            alert(
-                "Please draw or type your signature first."
-            );
-
-            return;
-        }
-
-        appliedSignature = signature;
-
-        appliedImage.src =
-            appliedSignature;
-
-        appliedPreview.classList.add("show");
-
-        signatureResult.innerHTML = `
-            <strong>
-                <i class="fa fa-check-circle"></i>
-                Signature Applied
-            </strong>
-
-            <br><br>
-
-            Your signature is ready to be added to the document.
-        `;
-
-        signatureResult.classList.add("show");
-
-        generateButton.disabled = false;
-
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | GENERATE SIGNED COPY
-    |--------------------------------------------------------------------------
-    */
-
-    generateButton.addEventListener("click", async function (event) {
-
-        event.preventDefault();
-
-        if (!appliedSignature) {
-
-            alert(
-                "Please apply your signature first."
-            );
-
-            return;
-        }
-
-        generateButton.disabled = true;
-
-        const originalText =
-            generateButton.innerHTML;
-
-        generateButton.innerHTML =
-            '<i class="fa fa-spinner fa-spin"></i> Generating...';
-
-
-        try {
-
-            const formData =
-                new FormData();
-
-            formData.append(
-                "id",
-                "<?= (int)$document['id'] ?>"
-            );
-
-            formData.append(
-                "signature",
-                appliedSignature
+document.addEventListener(
+    "DOMContentLoaded",
+    function() {
+
+        const removeButton =
+            document.getElementById(
+                "removeSignedCopy"
             );
 
 
-            const response =
-                await fetch(
-                    "api/documents/sign.php",
-                    {
-                        method: "POST",
-                        body: formData
-                    }
-                );
+        if (removeButton) {
 
-
-            const responseText =
-                await response.text();
-
-            console.log(
-                "Signing server response:",
-                responseText
+            removeButton.addEventListener(
+                "click",
+                removeSignedCopy
             );
-
-
-            let result;
-
-            try {
-
-                result =
-                    JSON.parse(responseText);
-
-            } catch (jsonError) {
-
-                console.error(
-                    "Invalid JSON response:",
-                    responseText
-                );
-
-                throw new Error(
-                    "The server returned an invalid response."
-                );
-            }
-
-
-            if (!result.success) {
-
-                throw new Error(
-                    result.message ||
-                    "Unable to generate signed document."
-                );
-            }
-
-
-            signatureResult.innerHTML = `
-
-                <strong>
-                    <i class="fa fa-check-circle"></i>
-                    Signed document generated successfully.
-                </strong>
-
-                <br><br>
-
-                Your signed PDF has been saved.
-
-                <br><br>
-
-                <a
-                    href="${result.reviewed_url}"
-                    target="_blank"
-                    class="signed-download"
-                >
-
-                    <i class="fa fa-file-pdf"></i>
-
-                    View Signed PDF
-
-                </a>
-
-            `;
-
-            signatureResult.classList.add("show");
-
-            generateButton.innerHTML =
-                '<i class="fa fa-check"></i> Signed Copy Generated';
-
-
-            setTimeout(function () {
-
-                window.location.reload();
-
-            }, 2000);
-
-
-        } catch (error) {
-
-            console.error(
-                "Signing error:",
-                error
-            );
-
-            alert(
-                error.message ||
-                "Something went wrong while generating the signed document."
-            );
-
-            generateButton.disabled = false;
-
-            generateButton.innerHTML =
-                originalText;
         }
 
-    });
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | INITIALIZED
-    |--------------------------------------------------------------------------
-    */
-
-    console.log(
-        "Digital signature system initialized successfully."
-    );
-
-});
+    }
+);
 
 </script>
-
-
-
-

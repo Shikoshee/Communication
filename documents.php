@@ -51,21 +51,30 @@ if (!$canView) {
 |
 */
 
+
 function normalizeDocumentStatus($status)
 {
-    $status = strtolower(trim((string)$status));
+    $status = strtolower(trim((string) $status));
 
-    if ($status === '') {
+    if (in_array($status, [
+        '',
+        'pending',
+        'pending_manager_approval',
+        'pending_final_approval'
+    ], true)) {
         return 'pending';
     }
 
-    if (!in_array($status, ['pending', 'approved', 'rejected'], true)) {
-        return 'pending';
+    if ($status === 'approved') {
+        return 'approved';
+    }
+
+    if ($status === 'rejected') {
+        return 'rejected';
     }
 
     return $status;
 }
-
 /*
 |--------------------------------------------------------------------------
 | STATISTICS
@@ -618,83 +627,58 @@ include "includes/navbar.php";
             );
 
 
-            /*
-             * FILE PATH
-             */
-
-            $filePath = trim(
-                $doc['file_path'] ?? ''
-            );
-
-
-            /*
-             * EXTENSION
-             */
-
-            $parsedPath = parse_url(
-                $filePath,
-                PHP_URL_PATH
-            );
-
-            $fileExtension = strtolower(
-                pathinfo(
-                    $parsedPath ?: $filePath,
-                    PATHINFO_EXTENSION
-                )
-            );
+         
+/*
+|--------------------------------------------------------------------------
+| ORIGINAL AND SIGNED FILE PATHS
+|--------------------------------------------------------------------------
+*/
 
 
-            /*
-             * OFFICE FILES
-             */
+/*
+|--------------------------------------------------------------------------
+| Select the document to display
+|--------------------------------------------------------------------------
+| Prefer the newly generated signed copy whenever it exists.
+| Keep file_path unchanged so the original upload is preserved.
+|--------------------------------------------------------------------------
+*/
 
-            $wordExtensions = [
-                'doc',
-                'docx'
-            ];
+$originalFilePath = trim((string)($doc['file_path'] ?? ''));
+$signedFilePath   = trim((string)($doc['reviewed_file'] ?? ''));
 
-            $excelExtensions = [
-                'xls',
-                'xlsx',
-                'csv'
-            ];
+$useSignedCopy = ($signedFilePath !== '');
 
+$effectiveFilePath = $useSignedCopy
+    ? $signedFilePath
+    : $originalFilePath;
 
-            $isWord = in_array(
-                $fileExtension,
-                $wordExtensions,
-                true
-            );
+// Determine the original document type.
+$originalExtension = strtolower(
+    pathinfo(parse_url($originalFilePath, PHP_URL_PATH) ?: $originalFilePath, PATHINFO_EXTENSION)
+);
 
+$isWord = in_array($originalExtension, [
+    'doc', 'docx', 'docm', 'dot', 'dotx', 'odt', 'rtf', 'txt'
+], true);
 
-            $isExcel = in_array(
-                $fileExtension,
-                $excelExtensions,
-                true
-            );
+$isExcel = in_array($originalExtension, [
+    'xls', 'xlsx', 'xlsm', 'ods', 'csv'
+], true);
 
-
-            /*
-             * DOCUMENT URL
-             */
-
-            if (
-                preg_match(
-                    '#^https?://#i',
-                    $filePath
-                )
-            ) {
-
-                $documentUrl = $filePath;
-
-            } else {
-
-                $documentUrl =
-                    rtrim(APP_URL, '/') .
-                    '/' .
-                    ltrim($filePath, '/');
-
-            }
+// Build the URL for the selected document.
+if (
+    preg_match('~^https?://~i', $effectiveFilePath)
+) {
+    $documentUrl = $effectiveFilePath;
+} else {
+    $relativePath = ltrim(str_replace('\\', '/', $effectiveFilePath), '/');
+    $documentUrl = rtrim(APP_URL, '/') . '/' . $relativePath;
+}
+/*
+ * Do not force HTTPS URLs back to localhost.
+ * Remote users and ONLYOFFICE must use the correct public hostname.
+ */
 
 
             /*
@@ -714,15 +698,12 @@ include "includes/navbar.php";
 
             $fileIcon = 'fa-file';
 
-
-            if (
-                str_contains($fileType, 'pdf') ||
-                $fileExtension === 'pdf'
-            ) {
-
-                $fileIcon = 'fa-file-pdf pdf';
-
-            } elseif (
+if (
+    str_contains($fileType, 'pdf') ||
+    $originalExtension === 'pdf'
+) {
+    $fileIcon = 'fa-file-pdf pdf';
+}elseif (
                 str_contains($fileType, 'word') ||
                 str_contains($fileType, 'doc') ||
                 $isWord
@@ -886,78 +867,73 @@ include "includes/navbar.php";
 
 <td>
 
-    <!-- ==================================================
-         VIEW / DOWNLOAD
-    =================================================== -->
+  
+<!-- ==================================================
+     OPEN DOCUMENT / VIEW SIGNED COPY / DOWNLOAD
+=================================================== -->
 
-    <?php if ($canView && !empty($doc['file_path'])) { ?>
+<?php if ($canView && $effectiveFilePath !== '') { ?>
 
-        <?php if ($isWord): ?>
+    <?php if ($useSignedCopy) { ?>
 
-            <a
-                href="ms-word:ofe|u|<?= htmlspecialchars(
-                    $documentUrl,
-                    ENT_QUOTES
-                ) ?>"
-                class="action view"
-                title="Open with Microsoft Word"
-            >
-
-                <i class="fa fa-eye"></i>
-
-            </a>
-
-        <?php elseif ($isExcel): ?>
-
-            <a
-                href="ms-excel:ofe|u|<?= htmlspecialchars(
-                    $documentUrl,
-                    ENT_QUOTES
-                ) ?>"
-                class="action view"
-                title="Open with Microsoft Excel"
-            >
-
-                <i class="fa fa-eye"></i>
-
-            </a>
-
-        <?php else: ?>
-
-            <a
-                href="<?= htmlspecialchars(
-                    $documentUrl,
-                    ENT_QUOTES
-                ) ?>"
-                target="_blank"
-                class="action view"
-                title="View Document"
-            >
-
-                <i class="fa fa-eye"></i>
-
-            </a>
-
-        <?php endif; ?>
-
-
-        <!-- DOWNLOAD -->
-
+        <!-- Approved documents open as the signed PDF -->
         <a
-            download
-            href="<?= htmlspecialchars(
-                $documentUrl,
-                ENT_QUOTES
-            ) ?>"
-            class="action download"
-            title="Download Document"
+            href="<?= htmlspecialchars($documentUrl, ENT_QUOTES, 'UTF-8') ?>"
+            target="_blank"
+            rel="noopener"
+            class="action view"
+            title="View Approved Signed Document"
         >
+            <i class="fa fa-eye"></i>
+        </a>
 
-            <i class="fa fa-download"></i>
+    <?php } elseif ($isWord) { ?>
 
+        <!-- Pending Word documents open in ONLYOFFICE -->
+        <a
+            href="<?= htmlspecialchars(
+                rtrim(APP_URL, '/') .
+                '/document-editor.php?id=' .
+                (int)$doc['id'],
+                ENT_QUOTES,
+                'UTF-8'
+            ) ?>"
+            target="_blank"
+            rel="noopener"
+            class="action view"
+            title="Open in ONLYOFFICE to Edit and Sign"
+        >
+            <i class="fa fa-edit"></i>
+        </a>
+
+    <?php } else { ?>
+
+        <!-- Other documents retain their normal view -->
+        <a
+            href="<?= htmlspecialchars($documentUrl, ENT_QUOTES, 'UTF-8') ?>"
+            target="_blank"
+            rel="noopener"
+            class="action view"
+            title="View Document"
+        >
+            <i class="fa fa-eye"></i>
         </a>
 
     <?php } ?>
+
+    <!-- Download the signed copy after approval -->
+    <a
+        href="<?= htmlspecialchars($documentUrl, ENT_QUOTES, 'UTF-8') ?>"
+        class="action download"
+        download
+        title="<?= $useSignedCopy
+            ? 'Download Approved Signed Document'
+            : 'Download Document' ?>"
+    >
+        <i class="fa fa-download"></i>
+    </a>
+
+<?php } ?>
 
 
     <!-- APPROVE / REJECT -->
