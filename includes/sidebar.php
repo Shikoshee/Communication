@@ -348,23 +348,26 @@ $canApprove = Permission::canApprove();
     <!-- ======================================================
          SETTINGS
     ======================================================= -->
+    <!-- ======================================================
+         SETTINGS — ADMIN ONLY
+    ======================================================= -->
 
-    <li>
+    <?php if ($isAdmin): ?>
 
-        <a
-            href="/Communication/settings.php"
-            title="Settings"
-        >
+        <li>
+            <a
+                href="/Communication/settings.php"
+                title="Settings"
+            >
+                <i class="fas fa-cog"></i>
 
-            <i class="fas fa-cog"></i>
+                <span>
+                    Settings
+                </span>
+            </a>
+        </li>
 
-            <span>
-                Settings
-            </span>
-
-        </a>
-
-    </li>
+    <?php endif; ?>
 
 
     <!-- ======================================================

@@ -19,6 +19,12 @@ define('SESSION_TIMEOUT', 1800); // 30 minutes in seconds
 
 // File Upload Settings
 define('UPLOAD_DIR', __DIR__ . '/uploads/documents/');
+define('MAIL_UPLOAD_DIR',__DIR__ . '/uploads/mail/');
+
+define(
+    'MAIL_MAX_FILE_SIZE',
+    25 * 1024 * 1024
+);
 define('MAX_FILE_SIZE', 50 * 1024 * 1024); // 50MB
 define('ALLOWED_EXTENSIONS', array('pdf', 'docx', 'xlsx', 'doc', 'xls', 'ppt', 'pptx', 'txt'));
 define('MYSQLDUMP_PATH', 'C:/xampp/mysql/bin/mysqldump.exe');
@@ -386,4 +392,36 @@ function setSetting($key, $value, $userId = null)
 
     return true;
 }
+
+/*
+|--------------------------------------------------------------------------
+| ONLYOFFICE DOCS CLOUD
+|--------------------------------------------------------------------------
+*/
+
+/*
+|--------------------------------------------------------------------------
+| ONLYOFFICE DOCS CLOUD
+|--------------------------------------------------------------------------
+*/
+
+define('ONLYOFFICE_DOCS_URL', 'https://3945754a.docs.onlyoffice.com');
+
+define('ONLYOFFICE_JWT_HEADER', 'AuthorizationJWT');
+
+define('ONLYOFFICE_JWT_SECRET', 'dac8e2a1d0d045f6a46454703ba5b8c0');
+/*
+|--------------------------------------------------------------------------
+| ONLYOFFICE PUBLIC APPLICATION URL
+|--------------------------------------------------------------------------
+|
+| Temporary Cloudflare Quick Tunnel URL.
+| 
+*/
+
+define(
+    'ONLYOFFICE_PUBLIC_APP_URL',
+    'https://rfc-movements-groundwater-assignments.trycloudflare.com/communication'
+);
+
 ?>
