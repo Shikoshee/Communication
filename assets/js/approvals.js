@@ -46,12 +46,17 @@ function approveDocument(documentId){
 
                         title:"Approved",
 
-                        text:data.message
+                        text:data.message || "Document approved successfully.",
+
+                        confirmButtonColor:"#198754",
+
+                        confirmButtonText:"OK"
 
                     })
                     .then(()=>{
 
-                        location.reload();
+                        // Return to the approvals page after approval
+                        window.location.href = "approvals.php";
 
                     });
 
@@ -59,15 +64,31 @@ function approveDocument(documentId){
 
                     Swal.fire({
 
-icon:"error",
+                        icon:"error",
 
-title:"Failed",
+                        title:"Failed",
 
-text:data.message
+                        text:data.message
 
-});
+                    });
 
                 }
+
+            })
+
+            .catch(error=>{
+
+                console.error(error);
+
+                Swal.fire({
+
+                    icon:"error",
+
+                    title:"Server Error",
+
+                    text:"Could not process document approval."
+
+                });
 
             });
 
@@ -91,7 +112,6 @@ function rejectDocument(id){
 
         inputPlaceholder:"Enter rejection reason...",
 
-
         showCancelButton:true,
 
         confirmButtonText:"Reject",
@@ -100,12 +120,9 @@ function rejectDocument(id){
 
         cancelButtonText:"Cancel"
 
-
     }).then((result)=>{
 
-
         if(result.isConfirmed){
-
 
             fetch("api/documents/reject.php",{
 
@@ -119,19 +136,15 @@ function rejectDocument(id){
                 "id="+id+
                 "&reason="+encodeURIComponent(result.value)
 
-
             })
 
             .then(response=>response.json())
 
             .then(data=>{
 
-
                 console.log(data);
 
-
                 if(data.success){
-
 
                     Swal.fire({
 
@@ -148,10 +161,8 @@ function rejectDocument(id){
 
                     });
 
-
                 }
                 else{
-
 
                     Swal.fire({
 
@@ -163,17 +174,13 @@ function rejectDocument(id){
 
                     });
 
-
                 }
-
 
             })
 
             .catch(error=>{
 
-
                 console.error(error);
-
 
                 Swal.fire({
 
@@ -185,15 +192,11 @@ function rejectDocument(id){
 
                 });
 
-
             });
-
 
         }
 
-
     });
-
 
 }
 
