@@ -16,6 +16,26 @@ $breadcrumb = "Dashboard / Settings";
 include "includes/page-header.php";
 
 ?>
+    <!-- ======================================================
+         SETTINGS — ADMIN ONLY
+    ======================================================= -->
+
+    <?php if ($isAdmin): ?>
+
+        <li>
+            <a
+                href="/Communication/settings.php"
+                title="Settings"
+            >
+                <i class="fas fa-cog"></i>
+
+                <span>
+                    Settings
+                </span>
+            </a>
+        </li>
+
+    <?php endif; ?>
 
 <link rel="stylesheet" href="assets/css/settings.css">
 

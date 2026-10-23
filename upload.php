@@ -336,10 +336,12 @@ function uploadEscape($value): string
             <div id="progressBar"></div>
         </div>
 
+        
         <?php if ($draft): ?>
             <button
                 type="submit"
                 class="upload-submit"
+                id="finalizeUploadButton"
                 <?= !$signedPdfReady ? 'disabled' : '' ?>
             >
                 <i class="fa fa-check"></i>
@@ -350,12 +352,28 @@ function uploadEscape($value): string
                 href="document-editor.php?draft_id=<?= (int)$draftId ?>&amp;draft_token=<?= rawurlencode($draftToken) ?>"
                 style="display:inline-block;margin-left:12px;"
             >Return to Editor</a>
+
         <?php else: ?>
-            <button type="submit" class="upload-submit">
+            <button
+                type="submit"
+                class="upload-submit"
+                id="uploadDocumentButton"
+            >
                 <i class="fa fa-upload"></i>
                 Upload Document
             </button>
+
+            <button
+                type="button"
+                class="upload-submit"
+                id="signDocumentButton"
+                style="display:none;"
+            >
+                <i class="fa fa-pen-to-square"></i>
+                Sign Document
+            </button>
         <?php endif; ?>
+
 
     </form>
     <?php endif; ?>

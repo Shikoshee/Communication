@@ -5,7 +5,7 @@
     SetEnvIf Origin "^https://3945754a\.docs\.onlyoffice\.com$" ALLOW_CORS_ORIGIN=$0
 
     # Communication System tunnel origin
-    SetEnvIf Origin "^https://couples-informational-dsc-laboratories.trycloudflare.com$" ALLOW_CORS_ORIGIN=$0
+SetEnvIf Origin "^https://html-forests-dow-racing\.trycloudflare\.com$" ALLOW_CORS_ORIGIN=$0
 
     # CORS response headers
     Header always set Access-Control-Allow-Origin "%{ALLOW_CORS_ORIGIN}e" env=ALLOW_CORS_ORIGIN

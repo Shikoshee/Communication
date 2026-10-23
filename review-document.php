@@ -77,11 +77,13 @@ $fileExtension = strtolower(
 |--------------------------------------------------------------------------
 */
 
-$editorUrl =
-    rtrim(APP_URL, "/") .
-    "/document-editor.php?id=" .
-    (int)$document["id"];
+$editorBaseUrl = rtrim(
+    (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'
+        ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . '/communication',
+    '/'
+);
 
+$editorUrl = $editorBaseUrl . '/document-editor.php?id=' . (int)$document['id'];
 
 /*
 |--------------------------------------------------------------------------
